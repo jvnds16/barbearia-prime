@@ -37,17 +37,17 @@ Adicione às configurações de Production, Preview e Development:
 ```env
 MONGODB_URI=mongodb+srv://...
 MONGO_DB=barbearia-prime
-FRONTEND_URL=https://seu-projeto.vercel.app
 ADMIN_PASSWORD=uma-senha-com-pelo-menos-12-caracteres
 JWT_SECRET=um-segredo-aleatorio-com-pelo-menos-32-caracteres
 VITE_API_URL=/api
 VITE_SITE_URL=https://seu-projeto.vercel.app
 ```
 
-`NODE_ENV` é definido automaticamente pela Vercel.
+`NODE_ENV` e a URL do deploy são definidos automaticamente pela Vercel. `FRONTEND_URL` é
+opcional nesse ambiente; configure-a apenas quando o frontend estiver hospedado em outro domínio.
 
-Depois de conectar um domínio próprio, atualize `FRONTEND_URL` e `VITE_SITE_URL` e faça um novo
-deploy.
+Depois de conectar um domínio próprio, atualize `VITE_SITE_URL` e, se necessário, `FRONTEND_URL`,
+e faça um novo deploy.
 
 ## 4. Preparar o banco
 

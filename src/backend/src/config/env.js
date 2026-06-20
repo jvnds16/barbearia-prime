@@ -4,11 +4,27 @@ dotenv.config();
 
 const nodeEnv = process.env.NODE_ENV || "development";
 
+function normalizeUrl(value) {
+  const url = value?.trim();
+  if (!url) return undefined;
+
+  return `${/^https?:\/\//i.test(url) ? "" : "https://"}${url}`.replace(/\/+$/, "");
+}
+
+export function resolveFrontendUrl(environment = process.env) {
+  return (
+    normalizeUrl(environment.FRONTEND_URL) ||
+    normalizeUrl(environment.VERCEL_PROJECT_PRODUCTION_URL) ||
+    normalizeUrl(environment.VERCEL_URL) ||
+    "http://localhost:3000"
+  );
+}
+
 export const env = {
   port: process.env.PORT || 3001,
   mongoUri: process.env.MONGODB_URI,
   mongoDb: process.env.MONGO_DB || "barbearia-prime",
-  frontendUrl: process.env.FRONTEND_URL || "http://localhost:3000",
+  frontendUrl: resolveFrontendUrl(),
   adminPassword: process.env.ADMIN_PASSWORD || (nodeEnv === "development" ? "teste123" : undefined),
   jwtSecret: process.env.JWT_SECRET || (nodeEnv === "development" ? "barbearia-prime-dev-secret" : undefined),
   nodeEnv
@@ -21,7 +37,6 @@ export function validateProductionEnv() {
   if (!env.mongoUri) missing.push("MONGODB_URI");
   if (!env.adminPassword) missing.push("ADMIN_PASSWORD");
   if (!env.jwtSecret) missing.push("JWT_SECRET");
-  if (!process.env.FRONTEND_URL) missing.push("FRONTEND_URL");
 
   if (missing.length) {
     throw new Error(`Variáveis obrigatórias ausentes: ${missing.join(", ")}`);
