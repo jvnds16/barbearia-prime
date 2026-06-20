@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Scissors, LogOut, Trash2, Edit, X, Save, Clock, User, Phone, Home, DollarSign, TrendingUp, Calendar, Plus, Eye, EyeOff, RotateCcw } from 'lucide-react';
+import { Scissors, LogOut, Trash2, Edit, X, Save, Clock, User, Phone, Home, TrendingUp, Calendar, Plus, Eye, EyeOff, RotateCcw } from 'lucide-react';
 
 import { authService } from '../services/authService';
 import { schedulingService } from '../services/schedulingService';
@@ -678,7 +678,7 @@ function Admin() {
 
       {activeTab === 'dashboard' ? (
         /* Dashboard */
-        <div className="container mx-auto px-6 pb-6">
+        <div className="container mx-auto px-4 pb-6 sm:px-6">
           {/* Notificação de novo agendamento */}
           <div className="fixed top-4 right-4 z-50" id="notification-container"></div>
 
@@ -699,7 +699,6 @@ function Admin() {
             <div className="bg-zinc-900 p-6 rounded-lg border border-amber-500/20 transform transition-all duration-300 hover:scale-105">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-sm font-medium text-white">Lucro hoje</h3>
-                <DollarSign className="h-5 w-5 text-green-500" />
               </div>
               <p className="text-3xl font-bold text-green-500">{formatarMoeda(dashboardStats.lucroHoje)}</p>
               <p className="text-xs text-white mt-1">{dashboardStats.atendimentosHoje} presença(s) confirmada(s)</p>
@@ -829,10 +828,10 @@ function Admin() {
               <div className="divide-y divide-zinc-700">
                 {agendamentosRecentes.map((agendamento, index) => (
                   <div key={agendamento._id || `${agendamento.data}-${agendamento.horario}-${index}`} className="p-4 hover:bg-zinc-800 transition">
-                    <div className="flex justify-between items-center">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <p className="font-semibold text-lg">{agendamento.nome}</p>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-3 flex flex-wrap items-center gap-2 sm:gap-3">
+                          <p className="min-w-0 break-words text-lg font-semibold">{agendamento.nome}</p>
                           <span className="px-2 py-1 text-xs rounded-full bg-amber-500/20 text-amber-500">
                             {agendamento.servico}
                           </span>
@@ -840,37 +839,38 @@ function Admin() {
                             {appointmentStatusLabels[agendamento.status || 'pendente']}
                           </span>
                         </div>
-                        <div className="flex items-center gap-4 text-sm text-white">
-                          <div className="flex items-center gap-1">
-                            <Calendar className="h-4 w-4" />
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-white">
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <Calendar className="h-4 w-4 shrink-0" />
                             {formatarData(agendamento.data)}
                           </div>
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-4 w-4" />
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <Clock className="h-4 w-4 shrink-0" />
                             {agendamento.horario}
                           </div>
-                          <div className="flex items-center gap-1 text-green-500">
-                            <DollarSign className="h-4 w-4" />
+                          <div className="shrink-0 font-medium text-green-500">
                             {formatarMoeda(agendamento.preco || 0)}
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex shrink-0 items-center justify-end gap-2 self-end sm:self-auto">
                         <button
                           onClick={() => handleEdit(agendamento)}
                           disabled={loading || !agendamento._id}
-                          className="p-2 text-amber-500 hover:bg-amber-500/20 rounded-lg transition-all"
+                          className="flex h-10 w-10 items-center justify-center rounded-lg text-amber-500 transition-all hover:bg-amber-500/20 disabled:opacity-50"
                           title="Editar"
                           aria-label={`Editar agendamento de ${agendamento.nome}`}
                         >
-                          <Edit className="h-5 w-5" />
+                          <Edit className="h-5 w-5 shrink-0" />
                         </button>
                         <button
                           onClick={() => setDeleteTarget(agendamento)}
-                          className="p-2 text-red-500 hover:bg-red-500/20 rounded-lg transition-all"
+                          disabled={loading || !agendamento._id}
+                          className="flex h-10 w-10 items-center justify-center rounded-lg text-red-500 transition-all hover:bg-red-500/20 disabled:opacity-50"
                           title="Cancelar agendamento"
+                          aria-label={`Cancelar agendamento de ${agendamento.nome}`}
                         >
-                          <Trash2 className="h-5 w-5" />
+                          <Trash2 className="h-5 w-5 shrink-0" />
                         </button>
                       </div>
                     </div>
@@ -954,7 +954,7 @@ function Admin() {
                   return (
                     <div
                       key={agendamento._id || `${agendamento.data}-${agendamento.horario}-${index}`}
-                      className={`p-6 transition ${isEditing ? 'bg-zinc-900' : 'hover:bg-zinc-800'}`}
+                      className={`p-4 transition sm:p-6 ${isEditing ? 'bg-zinc-900' : 'hover:bg-zinc-800'}`}
                     >
                       {isEditing ? (
                         // Modo Edição
@@ -1088,33 +1088,33 @@ function Admin() {
                         </div>
                       ) : (
                         // Modo Visualização
-                        <div className="flex flex-col md:flex-row md:items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-4 mb-2">
-                              <div className="flex items-center space-x-2">
-                                <User className="h-4 w-4 text-amber-500" />
-                                <span className="font-semibold text-lg">{agendamento.nome}</span>
+                        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-3 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-x-4">
+                              <div className="flex min-w-0 items-start gap-2">
+                                <User className="mt-1 h-4 w-4 shrink-0 text-amber-500" />
+                                <span className="min-w-0 break-words text-lg font-semibold">{agendamento.nome}</span>
                               </div>
-                              <div className="flex items-center space-x-2">
-                                <Phone className="h-4 w-4 text-green-500" />
-                                <span className="text-white">{agendamento.telefone}</span>
+                              <div className="flex min-w-0 items-center gap-2">
+                                <Phone className="h-4 w-4 shrink-0 text-green-500" />
+                                <span className="break-words text-white">{agendamento.telefone}</span>
                               </div>
                               {agendamento.preco && (
-                                <div className="flex items-center space-x-2">
+                                <div className="flex items-center">
                                   <span className="text-green-500 font-bold">{formatarMoeda(agendamento.preco)}</span>
                                 </div>
                               )}
                             </div>
 
-                            <div className="flex flex-wrap gap-4 text-sm text-white">
-                              <div className="flex items-center space-x-1">
-                                <Scissors className="h-4 w-4" />
-                                <span>{agendamento.servico}</span>
+                            <div className="flex flex-col items-start gap-2 text-sm text-white sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
+                              <div className="flex min-w-0 items-start gap-1.5">
+                                <Scissors className="mt-0.5 h-4 w-4 shrink-0" />
+                                <span className="break-words">{agendamento.servico}</span>
                               </div>
-                              <div className="flex items-center space-x-4">
-                                <div className="flex items-center space-x-2">
-                                  <Clock className="h-4 w-4" />
-                                  <span>
+                              <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+                                <div className="flex items-center gap-2">
+                                  <Clock className="h-4 w-4 shrink-0" />
+                                  <span className="whitespace-nowrap">
                                     {formatarData(agendamento.data)} às {agendamento.horario}
                                   </span>
                                 </div>
@@ -1125,22 +1125,24 @@ function Admin() {
                             </div>
                           </div>
 
-                          <div className="flex space-x-2 mt-4 md:mt-0">
+                          <div className="flex shrink-0 items-center justify-end gap-2 self-end md:self-auto">
                             <button
                               onClick={() => handleEdit(agendamento)}
                               disabled={loading || !agendamento._id}
-                              className="flex items-center space-x-2 bg-amber-600 hover:bg-amber-700 px-3 py-2 rounded-md transition disabled:opacity-50"
+                              className="flex h-10 min-w-10 items-center justify-center gap-2 rounded-md bg-amber-600 px-3 transition hover:bg-amber-700 disabled:opacity-50"
+                              aria-label={`Editar agendamento de ${agendamento.nome}`}
                             >
-                              <Edit className="h-4 w-4" />
+                              <Edit className="h-4 w-4 shrink-0" />
                               <span className="hidden sm:inline">Editar</span>
                             </button>
                             <button
                               onClick={() => setDeleteTarget(agendamento)}
                               disabled={loading || !agendamento._id}
-                              className="flex items-center space-x-2 bg-red-600 hover:bg-red-700 px-3 py-2 rounded-md transition disabled:opacity-50"
+                              className="flex h-10 min-w-10 items-center justify-center gap-2 rounded-md bg-red-600 px-3 transition hover:bg-red-700 disabled:opacity-50"
                               title="Cancelar agendamento"
+                              aria-label={`Cancelar agendamento de ${agendamento.nome}`}
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="h-4 w-4 shrink-0" />
                               <span className="hidden sm:inline">Cancelar</span>
                             </button>
                           </div>
