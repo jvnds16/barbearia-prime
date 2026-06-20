@@ -79,6 +79,16 @@ function Admin() {
   }, []);
 
   useEffect(() => {
+    if (!message) return;
+
+    const timeout = window.setTimeout(() => {
+      setMessage(null);
+    }, 3000);
+
+    return () => window.clearTimeout(timeout);
+  }, [message]);
+
+  useEffect(() => {
     authService.getSession()
       .then(() => setIsAuthenticated(true))
       .catch(() => authService.logout())
