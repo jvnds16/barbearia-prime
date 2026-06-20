@@ -242,6 +242,11 @@ function Admin() {
       setEditForm({ ...agendamento });
       setEditErrors({});
       setMessage(null);
+
+      if (activeTab === 'dashboard') {
+        setFilterDate(agendamento.data);
+        setActiveTab('agendamentos');
+      }
     }
   };
 
@@ -853,8 +858,10 @@ function Admin() {
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleEdit(agendamento)}
+                          disabled={loading || !agendamento._id}
                           className="p-2 text-amber-500 hover:bg-amber-500/20 rounded-lg transition-all"
                           title="Editar"
+                          aria-label={`Editar agendamento de ${agendamento.nome}`}
                         >
                           <Edit className="h-5 w-5" />
                         </button>
@@ -945,7 +952,10 @@ function Admin() {
                 {agendamentosOrdenados.map((agendamento, index) => {
                   const isEditing = editingId === agendamento._id;
                   return (
-                    <div key={agendamento._id || `${agendamento.data}-${agendamento.horario}-${index}`} className="p-6 hover:bg-zinc-800 transition">
+                    <div
+                      key={agendamento._id || `${agendamento.data}-${agendamento.horario}-${index}`}
+                      className={`p-6 transition ${isEditing ? 'bg-zinc-900' : 'hover:bg-zinc-800'}`}
+                    >
                       {isEditing ? (
                         // Modo Edição
                         <div className="space-y-4">
@@ -997,11 +1007,11 @@ function Admin() {
                                 Preço
                               </label>
                               <input
-                                type="number"
-                                step="0.01"
-                                value={editForm?.preco || 0}
+                                type="text"
+                                value={formatarMoeda(editForm?.preco || 0)}
                                 readOnly
-                                className="w-full cursor-not-allowed rounded-md bg-zinc-900 px-4 py-2 text-zinc-400 outline-none"
+                                aria-label="Valor do serviço"
+                                className="w-full rounded-md bg-zinc-800 px-4 py-2 text-white outline-none"
                               />
                               <p className="mt-1 text-xs text-zinc-500">Definido automaticamente pelo serviço.</p>
                               {editErrors.preco && <p className="mt-1 text-xs text-red-300">{editErrors.preco}</p>}
@@ -1091,7 +1101,6 @@ function Admin() {
                               </div>
                               {agendamento.preco && (
                                 <div className="flex items-center space-x-2">
-                                  <DollarSign className="h-4 w-4 text-green-500" />
                                   <span className="text-green-500 font-bold">{formatarMoeda(agendamento.preco)}</span>
                                 </div>
                               )}
