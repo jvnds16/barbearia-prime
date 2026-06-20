@@ -46,10 +46,30 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}) 
   });
 
   const text = await response.text();
-  const payload = text ? JSON.parse(text) : null;
+  let payload: unknown = null;
+
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      if (!response.ok) {
+        throw new ApiError(response.status, `Erro HTTP: ${response.status}`);
+      }
+
+      throw new Error("A API retornou uma resposta inválida.");
+    }
+  }
 
   if (!response.ok) {
-    throw new ApiError(response.status, payload?.error || `Erro HTTP: ${response.status}`);
+    const message =
+      typeof payload === "object" &&
+      payload !== null &&
+      "error" in payload &&
+      typeof payload.error === "string"
+        ? payload.error
+        : `Erro HTTP: ${response.status}`;
+
+    throw new ApiError(response.status, message);
   }
 
   return payload as T;

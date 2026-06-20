@@ -46,8 +46,6 @@ function Admin() {
   });
   const hoje = new Date();
   const dataHoje = formatDateValue(hoje);
-  const primeiroDiaAnoAtual = `${hoje.getFullYear()}-01-01`;
-  const ultimoDiaAnoAtual = `${hoje.getFullYear()}-12-31`;
   const limiteEdicao = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + 30);
   const dataLimiteEdicao = `${limiteEdicao.getFullYear()}-${String(limiteEdicao.getMonth() + 1).padStart(2, '0')}-${String(limiteEdicao.getDate()).padStart(2, '0')}`;
   const horariosPermitidos = Array.from({ length: 23 }, (_, index) => {
@@ -349,6 +347,21 @@ function Admin() {
     if (a.data !== b.data) return a.data.localeCompare(b.data);
     return a.horario.localeCompare(b.horario);
   });
+  const agendamentosRecentes = [...agendamentos]
+    .sort((a, b) => {
+      if (a.timestamp !== b.timestamp) return (b.timestamp || 0) - (a.timestamp || 0);
+      if (a.data !== b.data) return b.data.localeCompare(a.data);
+      return b.horario.localeCompare(a.horario);
+    })
+    .slice(0, 5);
+  const dataMinimaFiltro = agendamentos.reduce(
+    (earliest, appointment) => appointment.data < earliest ? appointment.data : earliest,
+    `${hoje.getFullYear() - 5}-01-01`
+  );
+  const dataMaximaFiltro = agendamentos.reduce(
+    (latest, appointment) => appointment.data > latest ? appointment.data : latest,
+    `${hoje.getFullYear() + 1}-12-31`
+  );
 
   if (checkingAuth) {
     return (
@@ -763,13 +776,13 @@ function Admin() {
               <div className="p-8 text-center text-white">
                 <p>Carregando...</p>
               </div>
-            ) : agendamentosOrdenados.slice(0, 5).length === 0 ? (
+            ) : agendamentosRecentes.length === 0 ? (
               <div className="p-8 text-center text-white">
                 <p>Nenhum agendamento encontrado.</p>
               </div>
             ) : (
               <div className="divide-y divide-zinc-700">
-                {agendamentosOrdenados.slice(0, 5).map((agendamento, index) => (
+                {agendamentosRecentes.map((agendamento, index) => (
                   <div key={agendamento._id || `${agendamento.data}-${agendamento.horario}-${index}`} className="p-4 hover:bg-zinc-800 transition">
                     <div className="flex justify-between items-center">
                       <div className="flex-1">
@@ -830,8 +843,8 @@ function Admin() {
                 </label>
                 <ModernDatePicker
                   value={filterDate}
-                  min={primeiroDiaAnoAtual}
-                  max={ultimoDiaAnoAtual}
+                  min={dataMinimaFiltro}
+                  max={dataMaximaFiltro}
                   onChange={setFilterDate}
                   placeholder="Todas as datas"
                   ariaLabel="Filtrar agendamentos por data"

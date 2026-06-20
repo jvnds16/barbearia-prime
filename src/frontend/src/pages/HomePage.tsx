@@ -23,6 +23,8 @@ type StatusModal = {
   type: "success" | "error";
   title: string;
   message: string;
+  actionUrl?: string;
+  actionLabel?: string;
 } | null;
 type RefreshResult = "remote" | "local" | "empty";
 
@@ -249,6 +251,7 @@ function App() {
   const [showRefreshNotification, setShowRefreshNotification] = useState<boolean>(false);
   const [refreshingAgenda, setRefreshingAgenda] = useState<boolean>(false);
   const [servicos, setServicos] = useState(defaultServices);
+  const schedulingInFlightRef = useRef(false);
 
   useEffect(() => {
     const carregarServicos = async () => {
@@ -370,22 +373,6 @@ function App() {
     }
   };
 
-  const reenviarPendentes = async () => {
-    const pendentes = sessionStorage.getItem("pendentes");
-    if (!pendentes) return;
-
-    try {
-      const dados = JSON.parse(pendentes);
-      for (const agendamento of dados) {
-        await schedulingService.create(agendamento);
-      }
-      sessionStorage.removeItem("pendentes");
-      console.log("✅ Pendentes reenviados com sucesso!");
-    } catch (error) {
-      console.error("Erro ao reenviar pendentes:", error);
-    }
-  };
-
   const limparDadosAntigos = () => {
     const timestamp = localStorage.getItem('agendamentosTimestamp');
     if (timestamp) {
@@ -393,7 +380,6 @@ function App() {
       if (agora - Number(timestamp) >= 24 * 60 * 60 * 1000) {
         localStorage.removeItem('agendamentos');
         localStorage.removeItem('agendamentosTimestamp');
-        sessionStorage.removeItem('pendentes');
       }
     }
   };
@@ -402,7 +388,6 @@ function App() {
     console.log('Iniciando aplicação...');
     limparDadosAntigos();
     fetchAgendamentos(true, false);
-    reenviarPendentes();
     const cleanupInterval = setInterval(limparDadosAntigos, 60 * 60 * 1000);
     return () => clearInterval(cleanupInterval);
   }, []);
@@ -462,11 +447,13 @@ function App() {
   };
 
   const horariosDisponiveisBase = gerarHorariosCompletos();
+  const selectedService = servicos.find(s => s.nome === formData.servico);
+  const selectedServiceDuration = Number.parseInt(selectedService?.duracao || "30", 10) || 30;
 
   const horariosFiltrados = formData.data ? horariosDisponiveisBase.filter((h) => {
     const [candidateHour, candidateMinute] = h.split(":").map(Number);
     const candidateStart = candidateHour * 60 + candidateMinute;
-    const candidateEnd = candidateStart + 30;
+    const candidateEnd = candidateStart + selectedServiceDuration;
     const ocupado = agendamentos.some((a) => {
       if (a.status === "cancelado" || a.data !== formData.data) return false;
       const [appointmentHour, appointmentMinute] = a.horario.split(":").map(Number);
@@ -484,8 +471,6 @@ function App() {
 
     return !ocupado;
   }) : horariosDisponiveisBase;
-
-  const selectedService = servicos.find(s => s.nome === formData.servico);
 
   const validateField = (name: FormField, value: string, data = formData): string => {
     const cleanedValue = value.trim();
@@ -635,6 +620,8 @@ function App() {
   };
 
   const confirmarAgendamento = async () => {
+    if (schedulingInFlightRef.current) return;
+
     if (!validateForm()) {
       setReviewModalOpen(false);
       return;
@@ -710,6 +697,8 @@ function App() {
       timestamp: new Date().getTime()
     };
 
+    schedulingInFlightRef.current = true;
+
     try {
       const result = await schedulingService.create({
         ...novoAgendamento,
@@ -718,14 +707,28 @@ function App() {
       });
       console.log('Resposta do servidor:', result);
 
+      const mensagem = encodeURIComponent(
+        `*Novo Agendamento Confirmado* 📅\n\n` +
+        `👤 Nome: ${formData.nome}\n` +
+        `📞 Telefone: ${formData.telefone}\n` +
+        `✂️ Serviço: ${formData.servico}\n` +
+        `📅 Data: ${formatarData(formData.data)}\n` +
+        `⏰ Horário: ${formData.horario}\n` +
+        `✅ Confirmação automática via site\n\n` +
+        `📲 *Link do Agendamento:* ${window.location.origin}/`
+      );
+      const whatsappUrl = `https://wa.me/5527981911375?text=${mensagem}`;
+
       setSuccessMessage("Agendamento realizado com sucesso!");
       setStatusModal({
         type: "success",
         title: "Agendamento confirmado",
-        message: "Seu horário foi registrado. O WhatsApp será aberto com os dados do agendamento."
+        message: "Seu horário foi registrado. Use o botão abaixo para enviar os dados pelo WhatsApp.",
+        actionUrl: whatsappUrl,
+        actionLabel: "Abrir WhatsApp"
       });
 
-      const agendamentoPublico = sanitizePublicAppointments([novoAgendamento])[0];
+      const agendamentoPublico = sanitizePublicAppointments([result.data])[0];
       const novosAgendamentos = [...agendamentos, agendamentoPublico];
       setAgendamentos(novosAgendamentos);
       localStorage.setItem("agendamentos", JSON.stringify(novosAgendamentos));
@@ -754,47 +757,23 @@ function App() {
         return;
       }
 
-      if (!(error instanceof TypeError)) {
-        setStatusModal({
-          type: "error",
-          title: "Erro inesperado",
-          message: "Não foi possível concluir o agendamento. Tente novamente."
-        });
-        setError("Não foi possível concluir o agendamento. Tente novamente.");
-        setLoading(false);
-        return;
-      }
-
       setStatusModal({
         type: "error",
-        title: "Agendamento salvo localmente",
-        message: "Não foi possível acessar o servidor agora, mas os dados ficaram salvos neste dispositivo."
+        title: "Não foi possível confirmar",
+        message: error instanceof TypeError
+          ? "A conexão foi interrompida. Verifique sua internet e tente novamente."
+          : "Não foi possível concluir o agendamento. Tente novamente."
       });
-      setError("Sem conexão com o servidor. Agendamento salvo localmente.");
-
-      const pendentes = JSON.parse(sessionStorage.getItem("pendentes") || "[]");
-      pendentes.push(novoAgendamento);
-      sessionStorage.setItem("pendentes", JSON.stringify(pendentes));
-
-      const agendamentoPublico = sanitizePublicAppointments([novoAgendamento])[0];
-      const novosAgendamentos = [...agendamentos, agendamentoPublico];
-      setAgendamentos(novosAgendamentos);
-      localStorage.setItem("agendamentos", JSON.stringify(novosAgendamentos));
+      setError(
+        error instanceof TypeError
+          ? "A conexão foi interrompida. Verifique sua internet e tente novamente."
+          : "Não foi possível concluir o agendamento. Tente novamente."
+      );
+      setLoading(false);
+      return;
+    } finally {
+      schedulingInFlightRef.current = false;
     }
-
-    const mensagem = encodeURIComponent(
-      `*Novo Agendamento Confirmado* 📅\n\n` +
-      `👤 Nome: ${formData.nome}\n` +
-      `📞 Telefone: ${formData.telefone}\n` +
-      `✂️ Serviço: ${formData.servico}\n` +
-      `📅 Data: ${formatarData(formData.data)}\n` +
-      `⏰ Horário: ${formData.horario}\n` +
-      `✅ Confirmação automática via site\n\n` +
-      `📲 *Link do Agendamento:* ${window.location.origin}/`
-    );
-
-    const numeroBarbearia = "5527981911375";
-    window.open(`https://wa.me/${numeroBarbearia}?text=${mensagem}`, "_blank");
 
     setFormData({
       nome: "",
@@ -834,17 +813,6 @@ function App() {
       document.body.style.overflow = 'unset';
     };
   }, [menuOpen, reviewModalOpen, statusModal, refreshingAgenda]);
-
-  useEffect(() => {
-    if (!reviewModalOpen && !statusModal) return;
-
-    const modalTimer = window.setTimeout(() => {
-      setReviewModalOpen(false);
-      setStatusModal(null);
-    }, 5000);
-
-    return () => window.clearTimeout(modalTimer);
-  }, [reviewModalOpen, statusModal]);
 
   useEffect(() => {
     if (!error) return;
@@ -985,10 +953,21 @@ function App() {
             </div>
             <h3 className="text-2xl font-bold text-white">{statusModal.title}</h3>
             <p className="mt-3 text-sm leading-6 text-zinc-300">{statusModal.message}</p>
+            {statusModal.actionUrl && (
+              <a
+                href={statusModal.actionUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 px-5 py-3 font-bold text-white transition hover:bg-green-500"
+              >
+                <IconBrandWhatsapp size={20} />
+                {statusModal.actionLabel || "Continuar"}
+              </a>
+            )}
             <button
               type="button"
               onClick={() => setStatusModal(null)}
-              className="mt-6 w-full rounded-lg bg-amber-500 px-5 py-3 font-bold text-black transition hover:bg-amber-400"
+              className={`${statusModal.actionUrl ? "mt-3" : "mt-6"} w-full rounded-lg bg-amber-500 px-5 py-3 font-bold text-black transition hover:bg-amber-400`}
             >
               Entendi
             </button>

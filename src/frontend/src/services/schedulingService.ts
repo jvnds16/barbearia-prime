@@ -1,5 +1,5 @@
 ﻿import { Agendamento, ApiResponse } from "../types/scheduling";
-import { apiRequest } from "./api";
+import { ApiError, apiRequest } from "./api";
 
 type ApiAppointmentStatus = "pending" | "completed" | "cancelled";
 
@@ -72,6 +72,9 @@ function mapAppointmentListResponse(response: ApiResponse<ApiAppointment[]>): Ap
   return { ...response, data: response.data.map(appointmentFromApi) };
 }
 
+const wait = (milliseconds: number) =>
+  new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+
 export const schedulingService = {
   async list(params?: { data?: string }) {
     const search = new URLSearchParams();
@@ -99,12 +102,23 @@ export const schedulingService = {
       headers.set("Idempotency-Key", appointment.idempotencyKey);
     }
 
-    const response = await apiRequest<ApiResponse<ApiAppointment>>("/scheduling", {
-      method: "POST",
-      headers,
-      body: JSON.stringify(appointmentToApi(appointment))
-    });
-    return mapAppointmentResponse(response);
+    const send = () =>
+      apiRequest<ApiResponse<ApiAppointment>>("/scheduling", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(appointmentToApi(appointment))
+      });
+
+    try {
+      return mapAppointmentResponse(await send());
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 503 || !appointment.idempotencyKey) {
+        throw error;
+      }
+
+      await wait(1200);
+      return mapAppointmentResponse(await send());
+    }
   },
 
   async update(id: string, appointment: Partial<Agendamento>) {
