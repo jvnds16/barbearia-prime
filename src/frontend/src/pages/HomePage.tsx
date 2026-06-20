@@ -719,19 +719,29 @@ function App() {
       );
       const whatsappUrl = `https://wa.me/5527981911375?text=${mensagem}`;
 
+      const agendamentoPublico = sanitizePublicAppointments([result.data])[0];
+      setAgendamentos((agendamentosAtuais) => {
+        const semHorarioDuplicado = agendamentosAtuais.filter(
+          (agendamento) =>
+            agendamento.data !== agendamentoPublico.data ||
+            agendamento.horario !== agendamentoPublico.horario
+        );
+        const novosAgendamentos = [...semHorarioDuplicado, agendamentoPublico];
+        localStorage.setItem("agendamentos", JSON.stringify(novosAgendamentos));
+        localStorage.setItem("agendamentosTimestamp", Date.now().toString());
+        return novosAgendamentos;
+      });
+
       setSuccessMessage("Agendamento realizado com sucesso!");
       setStatusModal({
         type: "success",
         title: "Agendamento confirmado",
-        message: "Seu horário foi registrado. Use o botão abaixo para enviar os dados pelo WhatsApp.",
+        message: "Seu horário foi registrado e a agenda já foi atualizada. Esta confirmação fechará automaticamente.",
         actionUrl: whatsappUrl,
         actionLabel: "Abrir WhatsApp"
       });
 
-      const agendamentoPublico = sanitizePublicAppointments([result.data])[0];
-      const novosAgendamentos = [...agendamentos, agendamentoPublico];
-      setAgendamentos(novosAgendamentos);
-      localStorage.setItem("agendamentos", JSON.stringify(novosAgendamentos));
+      void fetchAgendamentos(true, false);
 
     } catch (error: unknown) {
       console.error("Erro ao salvar agendamento:", error);
@@ -823,6 +833,16 @@ function App() {
 
     return () => window.clearTimeout(errorTimer);
   }, [error]);
+
+  useEffect(() => {
+    if (statusModal?.type !== "success") return;
+
+    const closeTimer = window.setTimeout(() => {
+      setStatusModal(null);
+    }, 4000);
+
+    return () => window.clearTimeout(closeTimer);
+  }, [statusModal]);
 
   const getAgendamentosPorData = (data: string) => {
     return agendamentos.filter(a => a.data === data);

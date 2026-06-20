@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Scissors, LogOut, Trash2, Edit, X, Save, Clock, User, Phone, Home, DollarSign, TrendingUp, Calendar, Plus, Eye, EyeOff, RotateCcw } from 'lucide-react';
 
 import { authService } from '../services/authService';
@@ -34,6 +34,7 @@ function Admin() {
   const [editErrors, setEditErrors] = useState<EditErrors>({});
   const [servicos, setServicos] = useState<Servico[]>(defaultServices);
   const [activeTab, setActiveTab] = useState<'agendamentos' | 'dashboard'>('dashboard');
+  const loadingAppointmentsRef = useRef(false);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats>({
     lucroHoje: 0,
     lucroMensal: 0,
@@ -144,12 +145,19 @@ function Admin() {
   };
 
   const loadAgendamentos = async (silent = false) => {
+    if (loadingAppointmentsRef.current) return;
+
+    loadingAppointmentsRef.current = true;
     if (!silent) setLoading(true);
+
     try {
       const { data, success } = await schedulingService.listAdmin();
       if (success) {
         setAgendamentos(data);
         calcularEstatisticas(data);
+        setMessage((current) =>
+          current?.text === 'Não foi possível atualizar os dados do painel.' ? null : current
+        );
       }
     } catch (error) {
       console.error('Erro ao carregar agendamentos:', error);
@@ -159,8 +167,12 @@ function Admin() {
         setMessage({ type: 'error', text: 'Sua sessão expirou. Entre novamente.' });
         return;
       }
-      setMessage({ type: 'error', text: 'Não foi possível atualizar os dados do painel.' });
+
+      if (!silent) {
+        setMessage({ type: 'error', text: 'Não foi possível atualizar os dados do painel.' });
+      }
     } finally {
+      loadingAppointmentsRef.current = false;
       if (!silent) setLoading(false);
     }
   };
