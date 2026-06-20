@@ -1,7 +1,7 @@
 ﻿import { Agendamento, ApiResponse } from "../types/scheduling";
 import { ApiError, apiRequest } from "./api";
 
-type ApiAppointmentStatus = "pending" | "completed" | "cancelled";
+type ApiAppointmentStatus = "pending" | "present" | "absent" | "completed" | "cancelled";
 
 interface ApiAppointment {
   _id?: string;
@@ -21,13 +21,16 @@ interface ApiAppointment {
 
 const statusFromApi: Record<ApiAppointmentStatus, NonNullable<Agendamento["status"]>> = {
   pending: "pendente",
-  completed: "concluido",
+  present: "presente",
+  absent: "ausente",
+  completed: "presente",
   cancelled: "cancelado"
 };
 
 const statusToApi: Record<NonNullable<Agendamento["status"]>, ApiAppointmentStatus> = {
   pendente: "pending",
-  concluido: "completed",
+  presente: "present",
+  ausente: "absent",
   cancelado: "cancelled"
 };
 

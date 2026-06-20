@@ -35,3 +35,12 @@ test("as coleções dos models usam nomes em inglês", () => {
   assert.equal(Client.collection.collectionName, "clients");
   assert.equal(Service.collection.collectionName, "services");
 });
+
+test("agendamentos aceitam presença e ausência", () => {
+  const allowedStatuses = Appointment.schema.path("status").enumValues;
+
+  assert.equal(allowedStatuses.includes("pending"), true);
+  assert.equal(allowedStatuses.includes("present"), true);
+  assert.equal(allowedStatuses.includes("absent"), true);
+  assert.equal(allowedStatuses.includes("cancelled"), true);
+});

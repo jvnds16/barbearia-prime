@@ -18,6 +18,20 @@ type EditErrors = Partial<Record<'nome' | 'telefone' | 'servico' | 'preco' | 'da
 const formatDateValue = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
+const appointmentStatusClasses: Record<NonNullable<Agendamento['status']>, string> = {
+  pendente: 'bg-yellow-500/20 text-yellow-500',
+  presente: 'bg-green-500/20 text-green-500',
+  ausente: 'bg-orange-500/20 text-orange-400',
+  cancelado: 'bg-red-500/20 text-red-500'
+};
+
+const appointmentStatusLabels: Record<NonNullable<Agendamento['status']>, string> = {
+  pendente: 'Pendente',
+  presente: 'Presente',
+  ausente: 'Ausente',
+  cancelado: 'Cancelado'
+};
+
 function Admin() {
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -42,6 +56,10 @@ function Admin() {
     mediaDiaria: 0,
     agendamentosHoje: 0,
     agendamentosMes: 0,
+    atendimentosHoje: 0,
+    atendimentosMes: 0,
+    pendentesMes: 0,
+    ausentesMes: 0,
     lucrosPorDia: {},
     servicosMaisPopulares: []
   });
@@ -91,26 +109,28 @@ function Admin() {
     const agora = new Date();
     const hoje = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}-${String(agora.getDate()).padStart(2, '0')}`;
     const mesAtual = hoje.substring(0, 7);
-    const agendamentosAtivos = agendamentos.filter(a => a.status !== 'cancelado');
-    const agendamentosConcluidos = agendamentos.filter(a => a.status === 'concluido');
+    const agendamentosValidos = agendamentos.filter(a => a.status !== 'cancelado');
+    const agendamentosPresentes = agendamentos.filter(a => a.status === 'presente');
 
-    const agendamentosHoje = agendamentosAtivos.filter(a => a.data === hoje);
-    const agendamentosMes = agendamentosAtivos.filter(a => a.data.startsWith(mesAtual));
-    const concluidosHoje = agendamentosConcluidos.filter(a => a.data === hoje);
-    const concluidosMes = agendamentosConcluidos.filter(a => a.data.startsWith(mesAtual));
+    const agendamentosHoje = agendamentosValidos.filter(a => a.data === hoje);
+    const agendamentosMes = agendamentosValidos.filter(a => a.data.startsWith(mesAtual));
+    const presentesHoje = agendamentosPresentes.filter(a => a.data === hoje);
+    const presentesMes = agendamentosPresentes.filter(a => a.data.startsWith(mesAtual));
+    const pendentesMes = agendamentosMes.filter(a => a.status === 'pendente').length;
+    const ausentesMes = agendamentosMes.filter(a => a.status === 'ausente').length;
 
-    const lucroHoje = concluidosHoje.reduce((total, a) => total + (a.preco || 0), 0);
-    const lucroMensal = concluidosMes.reduce((total, a) => total + (a.preco || 0), 0);
+    const lucroHoje = presentesHoje.reduce((total, a) => total + (a.preco || 0), 0);
+    const lucroMensal = presentesMes.reduce((total, a) => total + (a.preco || 0), 0);
 
     // Agrupar lucros por dia
-    const lucrosPorDia = concluidosMes.reduce((acc, a) => {
+    const lucrosPorDia = presentesMes.reduce((acc, a) => {
       const dia = a.data;
       acc[dia] = (acc[dia] || 0) + (a.preco || 0);
       return acc;
     }, {} as Record<string, number>);
 
     // Serviços mais populares
-    const servicosAgrupados = concluidosMes.reduce((acc, a) => {
+    const servicosAgrupados = presentesMes.reduce((acc, a) => {
       const servico = a.servico;
       if (!acc[servico]) {
         acc[servico] = { quantidade: 0, lucroTotal: 0 };
@@ -135,10 +155,14 @@ function Admin() {
     setDashboardStats({
       lucroHoje,
       lucroMensal,
-      totalAgendamentos: agendamentosAtivos.length,
+      totalAgendamentos: agendamentosValidos.length,
       mediaDiaria,
       agendamentosHoje: agendamentosHoje.length,
       agendamentosMes: agendamentosMes.length,
+      atendimentosHoje: presentesHoje.length,
+      atendimentosMes: presentesMes.length,
+      pendentesMes,
+      ausentesMes,
       lucrosPorDia,
       servicosMaisPopulares
     });
@@ -673,7 +697,7 @@ function Admin() {
                 <DollarSign className="h-5 w-5 text-green-500" />
               </div>
               <p className="text-3xl font-bold text-green-500">{formatarMoeda(dashboardStats.lucroHoje)}</p>
-              <p className="text-xs text-white mt-1">{dashboardStats.agendamentosHoje} agendamento(s)</p>
+              <p className="text-xs text-white mt-1">{dashboardStats.atendimentosHoje} presença(s) confirmada(s)</p>
             </div>
 
             <div className="bg-zinc-900 p-6 rounded-lg border border-amber-500/20">
@@ -682,7 +706,7 @@ function Admin() {
                 <TrendingUp className="h-5 w-5 text-amber-500" />
               </div>
               <p className="text-3xl font-bold text-amber-500">{formatarMoeda(dashboardStats.lucroMensal)}</p>
-              <p className="text-xs text-white mt-1">{dashboardStats.agendamentosMes} agendamento(s)</p>
+              <p className="text-xs text-white mt-1">{dashboardStats.atendimentosMes} presença(s) no mês</p>
             </div>
 
             <div className="bg-zinc-900 p-6 rounded-lg border border-amber-500/20">
@@ -691,7 +715,9 @@ function Admin() {
                 <Calendar className="h-5 w-5 text-blue-500" />
               </div>
               <p className="text-3xl font-bold text-blue-500">{dashboardStats.totalAgendamentos}</p>
-              <p className="text-xs text-white mt-1">Mês: {dashboardStats.agendamentosMes}</p>
+              <p className="text-xs text-white mt-1">
+                Mês: {dashboardStats.agendamentosMes} · {dashboardStats.pendentesMes} pendente(s) · {dashboardStats.ausentesMes} falta(s)
+              </p>
             </div>
 
             <div className="bg-zinc-900 p-6 rounded-lg border border-amber-500/20">
@@ -714,7 +740,7 @@ function Admin() {
             </h2>
 
             {Object.keys(dashboardStats.lucrosPorDia).length === 0 ? (
-              <p className="text-white text-center py-8">Nenhum agendamento neste mês</p>
+              <p className="text-white text-center py-8">Nenhuma presença confirmada neste mês</p>
             ) : (
               <div className="space-y-4">
                 {Object.keys(dashboardStats.lucrosPorDia)
@@ -751,11 +777,13 @@ function Admin() {
             </h2>
 
             {dashboardStats.servicosMaisPopulares.length === 0 ? (
-              <p className="text-white text-center py-8">Nenhum serviço registrado este mês</p>
+              <p className="text-white text-center py-8">Nenhum serviço realizado neste mês</p>
             ) : (
               <div className="space-y-4">
                 {dashboardStats.servicosMaisPopulares.map((servico) => {
-                  const porcentagem = (servico.quantidade / dashboardStats.agendamentosMes) * 100;
+                  const porcentagem = dashboardStats.atendimentosMes > 0
+                    ? (servico.quantidade / dashboardStats.atendimentosMes) * 100
+                    : 0;
 
                   return (
                     <div key={servico.servico} className="space-y-2">
@@ -802,6 +830,9 @@ function Admin() {
                           <p className="font-semibold text-lg">{agendamento.nome}</p>
                           <span className="px-2 py-1 text-xs rounded-full bg-amber-500/20 text-amber-500">
                             {agendamento.servico}
+                          </span>
+                          <span className={`rounded-full px-2 py-1 text-xs font-medium ${appointmentStatusClasses[agendamento.status || 'pendente']}`}>
+                            {appointmentStatusLabels[agendamento.status || 'pendente']}
                           </span>
                         </div>
                         <div className="flex items-center gap-4 text-sm text-white">
@@ -1015,7 +1046,8 @@ function Admin() {
                                 className="w-full bg-zinc-800 rounded-md px-4 py-2 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                               >
                                 <option value="pendente">Pendente</option>
-                                <option value="concluido">Concluído</option>
+                                <option value="presente">Presente</option>
+                                <option value="ausente">Ausente</option>
                                 <option value="cancelado">Cancelado</option>
                               </select>
                             </div>
@@ -1077,16 +1109,8 @@ function Admin() {
                                     {formatarData(agendamento.data)} às {agendamento.horario}
                                   </span>
                                 </div>
-                                <div className={`px-2 py-1 rounded-full text-xs font-medium ${{
-                                  'pendente': 'bg-yellow-500/20 text-yellow-500',
-                                  'concluido': 'bg-green-500/20 text-green-500',
-                                  'cancelado': 'bg-red-500/20 text-red-500'
-                                }[agendamento.status || 'pendente']}`}>
-                                  {{
-                                    'pendente': 'Pendente',
-                                    'concluido': 'Concluído',
-                                    'cancelado': 'Cancelado'
-                                  }[agendamento.status || 'pendente']}
+                                <div className={`px-2 py-1 rounded-full text-xs font-medium ${appointmentStatusClasses[agendamento.status || 'pendente']}`}>
+                                  {appointmentStatusLabels[agendamento.status || 'pendente']}
                                 </div>
                               </div>
                             </div>

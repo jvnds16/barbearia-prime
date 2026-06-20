@@ -12,7 +12,7 @@ const appointmentSchema = new mongoose.Schema(
     barber: { type: mongoose.Schema.Types.ObjectId, ref: "Barber" },
     status: {
       type: String,
-      enum: ["pending", "completed", "cancelled"],
+      enum: ["pending", "present", "absent", "cancelled", "completed"],
       default: "pending"
     },
     slotKey: {

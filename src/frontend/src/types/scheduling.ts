@@ -11,7 +11,7 @@ export interface Agendamento {
   duracaoMinutos?: number;
   canceladoEm?: string;
   canceladoPor?: string;
-  status?: "pendente" | "concluido" | "cancelado";
+  status?: "pendente" | "presente" | "ausente" | "cancelado";
 }
 
 export interface DashboardStats {
@@ -21,6 +21,10 @@ export interface DashboardStats {
   mediaDiaria: number;
   agendamentosHoje: number;
   agendamentosMes: number;
+  atendimentosHoje: number;
+  atendimentosMes: number;
+  pendentesMes: number;
+  ausentesMes: number;
   lucrosPorDia: Record<string, number>;
   servicosMaisPopulares: Array<{
     servico: string;

@@ -85,7 +85,7 @@ export async function migrateModelFieldsToEnglish() {
 
   if (existingCollections.has("appointments")) {
     await database.collection("appointments").updateMany(
-      { status: { $in: ["pendente", "concluido", "cancelado"] } },
+      { status: { $in: ["pendente", "presente", "ausente", "concluido", "completed", "cancelado"] } },
       [
         {
           $set: {
@@ -93,7 +93,8 @@ export async function migrateModelFieldsToEnglish() {
               $switch: {
                 branches: [
                   { case: { $eq: ["$status", "pendente"] }, then: "pending" },
-                  { case: { $eq: ["$status", "concluido"] }, then: "completed" },
+                  { case: { $in: ["$status", ["presente", "concluido", "completed"]] }, then: "present" },
+                  { case: { $eq: ["$status", "ausente"] }, then: "absent" },
                   { case: { $eq: ["$status", "cancelado"] }, then: "cancelled" }
                 ],
                 default: "$status"

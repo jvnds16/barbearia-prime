@@ -16,7 +16,7 @@ export async function getAvailableSlots({ data, barbeiro }) {
 
   const query = {
     date: data,
-    status: { $ne: "cancelled" }
+    status: { $in: ["pending", "present", "completed"] }
   };
 
   if (barbeiro) {

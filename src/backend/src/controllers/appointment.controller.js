@@ -8,6 +8,9 @@ import { getAvailableSlots } from "../services/availability.service.js";
 import { addDaysToISO, businessMinutesNow, isSunday } from "../utils/dateTime.js";
 import { appointmentToApi } from "../utils/apiSerializers.js";
 
+const VALID_APPOINTMENT_STATUSES = new Set(["pending", "present", "absent", "cancelled"]);
+const BLOCKING_APPOINTMENT_STATUSES = ["pending", "present", "completed"];
+
 function validarTelefone(telefone) {
   const numeros = String(telefone || "").replace(/\D/g, "");
   return /^[1-9]{2}(?:[2-8]|9[1-9])[0-9]{7,8}$/.test(numeros);
@@ -54,7 +57,7 @@ function horarioTemAntecedencia(horario, data) {
 }
 
 function criarSlotKeys({ data, horario, barbeiro, duracaoMinutos = 30, status = "pending" }) {
-  if (status === "cancelled") return undefined;
+  if (!BLOCKING_APPOINTMENT_STATUSES.includes(status)) return undefined;
 
   const [hour, minute] = horario.split(":").map(Number);
   const start = hour * 60 + minute;
@@ -72,7 +75,7 @@ async function ensureNoConflict({ data, horario, barbeiro, duracaoMinutos = 30, 
   const requestedSlots = criarSlotKeys({ data, horario, barbeiro, duracaoMinutos });
   const query = {
     date: data,
-    status: { $ne: "cancelled" }
+    status: { $in: BLOCKING_APPOINTMENT_STATUSES }
   };
 
   if (barbeiro) query.barber = barbeiro;
@@ -259,6 +262,15 @@ export async function updateAppointment(req, res) {
   if (req.body.barber !== undefined) updateData.barber = req.body.barber;
   if (req.body.status !== undefined) updateData.status = req.body.status;
 
+  if (updateData.status !== undefined && !VALID_APPOINTMENT_STATUSES.has(updateData.status)) {
+    throw new HttpError(400, "Invalid appointment status.");
+  }
+
+  const current = await Appointment.findById(id);
+  if (!current) {
+    throw new HttpError(404, "Appointment not found.");
+  }
+
   if (updateData.customerPhone) {
     updateData.customerPhone = normalizarTexto(updateData.customerPhone);
     if (!validarTelefone(updateData.customerPhone)) {
@@ -273,17 +285,12 @@ export async function updateAppointment(req, res) {
     }
   }
 
-  if (updateData.date && !validarDataAgendamento(updateData.date)) {
+  if (updateData.date && updateData.date !== current.date && !validarDataAgendamento(updateData.date)) {
     throw new HttpError(400, "Choose a valid date between today and the next 30 days.");
   }
 
-  if (updateData.time && !validarHorario(updateData.time)) {
+  if (updateData.time && updateData.time !== current.time && !validarHorario(updateData.time)) {
     throw new HttpError(400, "Time is outside business hours.");
-  }
-
-  const current = await Appointment.findById(id);
-  if (!current) {
-    throw new HttpError(404, "Appointment not found.");
   }
 
   const data = updateData.date || current.date;
@@ -292,11 +299,25 @@ export async function updateAppointment(req, res) {
   const status = updateData.status || current.status;
   let duracaoMinutos = current.durationMinutes || 30;
 
-  if ((updateData.date || updateData.time) && !horarioTemAntecedencia(horario, data)) {
+  const scheduleChanged =
+    (updateData.date !== undefined && updateData.date !== current.date) ||
+    (updateData.time !== undefined && updateData.time !== current.time);
+  const barberChanged =
+    updateData.barber !== undefined &&
+    String(updateData.barber || "") !== String(current.barber || "");
+  const serviceChanged =
+    updateData.serviceName !== undefined &&
+    normalizarTexto(updateData.serviceName) !== current.serviceName;
+
+  if (scheduleChanged && !horarioTemAntecedencia(horario, data)) {
     throw new HttpError(400, "Choose a time at least 30 minutes in advance.");
   }
 
-  if (updateData.serviceName) {
+  if (updateData.serviceName !== undefined) {
+    updateData.serviceName = normalizarTexto(updateData.serviceName);
+  }
+
+  if (serviceChanged) {
     const service = await resolveServiceDetails(updateData.serviceName);
     if (!service) {
       throw new HttpError(400, "Invalid or unavailable service.");
@@ -306,25 +327,38 @@ export async function updateAppointment(req, res) {
     duracaoMinutos = service.durationMinutes;
   }
 
-  if (status !== "cancelled" && (updateData.date || updateData.time || updateData.barber || updateData.serviceName || current.status === "cancelled")) {
+  const reactivatingSlot = ["cancelled", "absent"].includes(current.status);
+  if (
+    BLOCKING_APPOINTMENT_STATUSES.includes(status) &&
+    (scheduleChanged || barberChanged || serviceChanged || reactivatingSlot)
+  ) {
     await ensureNoConflict({ data, horario, barbeiro, duracaoMinutos, ignoreId: id });
   }
 
   const slotKeys = criarSlotKeys({ data, horario, barbeiro, duracaoMinutos, status });
-  const updateOperation = slotKeys
-    ? {
+  let updateOperation;
+
+  if (status === "cancelled") {
+    updateOperation = {
+      $set: {
+        ...updateData,
+        status: "cancelled",
+        cancelledAt: new Date(),
+        cancelledBy: req.user?.name || "Administrator"
+      },
+      $unset: { slotKey: 1, slotKeys: 1 }
+    };
+  } else if (status === "absent") {
+    updateOperation = {
+      $set: { ...updateData, status: "absent" },
+      $unset: { slotKey: 1, slotKeys: 1, cancelledAt: 1, cancelledBy: 1 }
+    };
+  } else {
+    updateOperation = {
         $set: { ...updateData, slotKeys },
         $unset: { slotKey: 1, cancelledAt: 1, cancelledBy: 1 }
-      }
-    : {
-        $set: {
-          ...updateData,
-          status: "cancelled",
-          cancelledAt: new Date(),
-          cancelledBy: req.user?.name || "Administrator"
-        },
-        $unset: { slotKey: 1, slotKeys: 1 }
       };
+  }
 
   const appointment = await Appointment.findByIdAndUpdate(id, updateOperation, {
     new: true,

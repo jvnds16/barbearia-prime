@@ -41,3 +41,29 @@ test("API serializers expose only English resource fields", () => {
     }
   }
 });
+
+test("appointment API exposes attendance statuses", () => {
+  const present = appointmentToApi(new Appointment({
+    customerName: "Maria Silva",
+    customerPhone: "(27) 99999-9999",
+    serviceName: "Haircut",
+    price: 30,
+    durationMinutes: 30,
+    date: "2026-06-20",
+    time: "10:00",
+    status: "present"
+  }));
+  const absent = appointmentToApi(new Appointment({
+    customerName: "Joana Silva",
+    customerPhone: "(27) 98888-8888",
+    serviceName: "Haircut",
+    price: 30,
+    durationMinutes: 30,
+    date: "2026-06-20",
+    time: "11:00",
+    status: "absent"
+  }));
+
+  assert.equal(present.status, "present");
+  assert.equal(absent.status, "absent");
+});
