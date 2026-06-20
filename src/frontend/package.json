@@ -9,6 +9,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "lint": "eslint src"
   },
+  "engines": {
+    "node": "24.x"
+  },
   "dependencies": {
     "@tabler/icons-react": "^3.35.0",
     "lucide-react": "^0.263.1",

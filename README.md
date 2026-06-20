@@ -43,6 +43,8 @@ barbearia-prime/
 
 ## Configuração
 
+Requer Node.js 24 LTS.
+
 Entre no diretório da aplicação:
 
 ```bash
