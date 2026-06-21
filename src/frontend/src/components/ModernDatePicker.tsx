@@ -9,7 +9,6 @@ type ModernDatePickerProps = {
   onChange: (value: string) => void;
   placeholder?: string;
   ariaLabel?: string;
-  disableSundays?: boolean;
 };
 
 const parseLocalDate = (value: string) => new Date(`${value}T00:00:00`);
@@ -36,8 +35,7 @@ export function ModernDatePicker({
   max,
   onChange,
   placeholder = "Escolha uma data",
-  ariaLabel = "Escolher data",
-  disableSundays = false
+  ariaLabel = "Escolher data"
 }: ModernDatePickerProps) {
   const [open, setOpen] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState(() => {
@@ -155,7 +153,6 @@ export function ModernDatePicker({
               const isCurrentMonth = date.getMonth() === visibleMonth.getMonth();
               const isDisabled =
                 !isCurrentMonth ||
-                (disableSundays && date.getDay() === 0) ||
                 date < minDate ||
                 date > maxDate;
               const isSelected = dateValue === value;

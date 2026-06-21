@@ -1036,7 +1036,6 @@ function Admin() {
                                 max={dataLimiteEdicao}
                                 onChange={(value) => handleEditChange('data', value)}
                                 ariaLabel="Alterar data do agendamento"
-                                disableSundays
                               />
                               {editErrors.data && <p className="mt-1 text-xs text-red-300">{editErrors.data}</p>}
                             </div>

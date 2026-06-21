@@ -39,6 +39,27 @@ const sanitizePublicAppointments = (appointments: Agendamento[]): Agendamento[] 
     duracaoMinutos
   }));
 
+const hasAppointmentConflict = (
+  appointments: Agendamento[],
+  date: string,
+  time: string,
+  durationMinutes: number
+) => {
+  const [candidateHour, candidateMinute] = time.split(":").map(Number);
+  const candidateStart = candidateHour * 60 + candidateMinute;
+  const candidateEnd = candidateStart + durationMinutes;
+
+  return appointments.some((appointment) => {
+    if (appointment.status === "cancelado" || appointment.data !== date) return false;
+
+    const [appointmentHour, appointmentMinute] = appointment.horario.split(":").map(Number);
+    const appointmentStart = appointmentHour * 60 + appointmentMinute;
+    const appointmentEnd = appointmentStart + (appointment.duracaoMinutos || 30);
+
+    return candidateStart < appointmentEnd && candidateEnd > appointmentStart;
+  });
+};
+
 type DatePickerProps = {
   value: string;
   min: string;
@@ -185,7 +206,7 @@ function DatePicker({ value, min, max, invalid, describedBy, onChange }: DatePic
             {days.map((date) => {
               const dateValue = toDateValue(date);
               const isCurrentMonth = date.getMonth() === visibleMonth.getMonth();
-              const isDisabled = !isCurrentMonth || date.getDay() === 0 || date < minDate || date > maxDate;
+              const isDisabled = !isCurrentMonth || date < minDate || date > maxDate;
               const isSelected = dateValue === value;
               const isToday = dateValue === todayValue;
 
@@ -252,6 +273,7 @@ function App() {
   const [refreshingAgenda, setRefreshingAgenda] = useState<boolean>(false);
   const [servicos, setServicos] = useState(defaultServices);
   const schedulingInFlightRef = useRef(false);
+  const agendaRequestSequenceRef = useRef(0);
 
   useEffect(() => {
     const carregarServicos = async () => {
@@ -317,7 +339,7 @@ function App() {
     try {
       const localData = localStorage.getItem('agendamentos');
       let hasLocalData = false;
-      if (localData) {
+      if (localData && !forceRefresh) {
         const parsedData = sanitizePublicAppointments(JSON.parse(localData));
         localStorage.setItem('agendamentos', JSON.stringify(parsedData));
         setAgendamentos(parsedData);
@@ -326,10 +348,13 @@ function App() {
       }
 
       if (forceRefresh) {
+        const requestSequence = ++agendaRequestSequenceRef.current;
         console.log('🔄 Buscando agendamentos da API...');
         const result = await schedulingService.list();
         if (result.success && result.data) {
           const publicAppointments = sanitizePublicAppointments(result.data);
+          if (requestSequence !== agendaRequestSequenceRef.current) return "remote";
+
           localStorage.setItem('agendamentos', JSON.stringify(publicAppointments));
           localStorage.setItem('agendamentosTimestamp', new Date().getTime().toString());
           setAgendamentos(publicAppointments);
@@ -392,6 +417,24 @@ function App() {
     return () => clearInterval(cleanupInterval);
   }, []);
 
+  useEffect(() => {
+    const synchronizeAgenda = () => {
+      if (document.visibilityState === "visible") {
+        void fetchAgendamentos(true, false);
+      }
+    };
+
+    const synchronizationInterval = window.setInterval(synchronizeAgenda, 15000);
+    window.addEventListener("focus", synchronizeAgenda);
+    document.addEventListener("visibilitychange", synchronizeAgenda);
+
+    return () => {
+      window.clearInterval(synchronizationInterval);
+      window.removeEventListener("focus", synchronizeAgenda);
+      document.removeEventListener("visibilitychange", synchronizeAgenda);
+    };
+  }, []);
+
   const isHoje = (data: string): boolean => {
     return data === getDataAtual();
   };
@@ -451,16 +494,12 @@ function App() {
   const selectedServiceDuration = Number.parseInt(selectedService?.duracao || "30", 10) || 30;
 
   const horariosFiltrados = formData.data ? horariosDisponiveisBase.filter((h) => {
-    const [candidateHour, candidateMinute] = h.split(":").map(Number);
-    const candidateStart = candidateHour * 60 + candidateMinute;
-    const candidateEnd = candidateStart + selectedServiceDuration;
-    const ocupado = agendamentos.some((a) => {
-      if (a.status === "cancelado" || a.data !== formData.data) return false;
-      const [appointmentHour, appointmentMinute] = a.horario.split(":").map(Number);
-      const appointmentStart = appointmentHour * 60 + appointmentMinute;
-      const appointmentEnd = appointmentStart + (a.duracaoMinutos || 30);
-      return candidateStart < appointmentEnd && candidateEnd > appointmentStart;
-    });
+    const ocupado = hasAppointmentConflict(
+      agendamentos,
+      formData.data,
+      h,
+      selectedServiceDuration
+    );
 
     if (isHoje(formData.data)) {
       const horaAtual = getHoraAtual();
@@ -610,13 +649,47 @@ function App() {
     });
   };
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSuccessMessage("");
 
-    if (validateForm()) {
-      setReviewModalOpen(true);
+    if (!validateForm()) return;
+
+    try {
+      const requestSequence = ++agendaRequestSequenceRef.current;
+      const result = await schedulingService.list({ data: formData.data });
+      const latestAppointments = sanitizePublicAppointments(result.data || []);
+      const otherDates = agendamentos.filter((appointment) => appointment.data !== formData.data);
+      const synchronizedAppointments = [...otherDates, ...latestAppointments];
+
+      if (requestSequence === agendaRequestSequenceRef.current) {
+        setAgendamentos(synchronizedAppointments);
+        localStorage.setItem("agendamentos", JSON.stringify(synchronizedAppointments));
+        localStorage.setItem("agendamentosTimestamp", Date.now().toString());
+      }
+
+      if (
+        hasAppointmentConflict(
+          latestAppointments,
+          formData.data,
+          formData.horario,
+          selectedServiceDuration
+        )
+      ) {
+        setFieldErrors((current) => ({
+          ...current,
+          horario: "Este horário acabou de ser ocupado. Escolha outro."
+        }));
+        setError("A agenda foi atualizada. Escolha outro horário disponível.");
+        return;
+      }
+    } catch (error) {
+      console.error("Não foi possível sincronizar a agenda antes da revisão:", error);
+      setError("Não foi possível atualizar os horários agora. Verifique sua conexão e tente novamente.");
+      return;
     }
+
+    setReviewModalOpen(true);
   };
 
   const confirmarAgendamento = async () => {
@@ -1342,9 +1415,9 @@ function App() {
                                   Indisponível para agendamento
                                 </div>
                               </div>
-                              <div className="text-right">
-                                <span className="font-mono bg-zinc-800 px-2 py-1 rounded">
-                                  <IconAlarm className="inline-block mr-1" />
+                              <div className="shrink-0 text-right">
+                                <span className="inline-flex items-center gap-1 whitespace-nowrap rounded bg-zinc-800 px-2 py-1 font-mono">
+                                  <IconAlarm className="shrink-0" />
                                   {a.horario}
                                 </span>
                               </div>
@@ -1379,9 +1452,9 @@ function App() {
                                   Indisponível para agendamento
                                 </div>
                               </div>
-                              <div className="text-right">
-                                <span className="font-mono bg-zinc-800 px-2 py-1 rounded">
-                                  <IconAlarm className="inline-block mr-1" />
+                              <div className="shrink-0 text-right">
+                                <span className="inline-flex items-center gap-1 whitespace-nowrap rounded bg-zinc-800 px-2 py-1 font-mono">
+                                  <IconAlarm className="shrink-0" />
                                   {a.horario}
                                 </span>
                               </div>
