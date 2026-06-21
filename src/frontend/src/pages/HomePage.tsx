@@ -908,6 +908,16 @@ function App() {
   }, [error]);
 
   useEffect(() => {
+    if (!successMessage) return;
+
+    const successTimer = window.setTimeout(() => {
+      setSuccessMessage("");
+    }, 3000);
+
+    return () => window.clearTimeout(successTimer);
+  }, [successMessage]);
+
+  useEffect(() => {
     if (statusModal?.type !== "success") return;
 
     const closeTimer = window.setTimeout(() => {
