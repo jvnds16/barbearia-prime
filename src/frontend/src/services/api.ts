@@ -42,6 +42,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}) 
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
+    cache: options.cache ?? (options.method ? undefined : "no-store"),
     headers
   });
 

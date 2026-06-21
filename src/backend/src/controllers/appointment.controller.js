@@ -5,7 +5,7 @@ import { HttpError } from "../utils/httpError.js";
 import { gerarHorariosDisponiveis, hojeISO } from "../utils/timeSlots.js";
 import { resolveServiceDetails } from "../services/serviceCatalog.service.js";
 import { getAvailableSlots } from "../services/availability.service.js";
-import { addDaysToISO, businessMinutesNow, isSunday } from "../utils/dateTime.js";
+import { addDaysToISO, businessMinutesNow } from "../utils/dateTime.js";
 import { appointmentToApi } from "../utils/apiSerializers.js";
 
 const VALID_APPOINTMENT_STATUSES = new Set(["pending", "present", "absent", "cancelled"]);
@@ -42,7 +42,7 @@ function dataMaximaISO() {
 }
 
 function validarDataAgendamento(data) {
-  return dataEhValida(data) && !isSunday(data) && data >= hojeISO() && data <= dataMaximaISO();
+  return dataEhValida(data) && data >= hojeISO() && data <= dataMaximaISO();
 }
 
 function validarHorario(horario) {
@@ -124,6 +124,7 @@ export async function listPublicSchedule(req, res) {
     .sort({ date: 1, time: 1 })
     .lean();
 
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   res.json({ success: true, data: appointments.map(appointmentToApi) });
 }
 

@@ -1,6 +1,6 @@
 import { Appointment } from "../models/appointment.model.js";
 import { gerarHorariosDisponiveis, hojeISO } from "../utils/timeSlots.js";
-import { businessMinutesNow, isSunday } from "../utils/dateTime.js";
+import { businessMinutesNow } from "../utils/dateTime.js";
 
 function horarioEhFuturoComMargem(horario, data) {
   if (data !== hojeISO()) return true;
@@ -12,8 +12,6 @@ function horarioEhFuturoComMargem(horario, data) {
 }
 
 export async function getAvailableSlots({ data, barbeiro }) {
-  if (isSunday(data)) return [];
-
   const query = {
     date: data,
     status: { $in: ["pending", "present", "completed"] }
