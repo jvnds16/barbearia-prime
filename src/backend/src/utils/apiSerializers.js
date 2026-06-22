@@ -3,17 +3,68 @@ function plain(value) {
 }
 
 export function appointmentToApi(value) {
-  return plain(value);
+  const appointment = plain(value);
+  if (!appointment) return appointment;
+
+  return {
+    _id: appointment._id,
+    customerName: appointment.customerName,
+    customerPhone: appointment.customerPhone,
+    serviceName: appointment.serviceName,
+    price: appointment.price,
+    durationMinutes: appointment.durationMinutes,
+    date: appointment.date,
+    time: appointment.time,
+    barber: appointment.barber,
+    status: appointment.status,
+    cancelledAt: appointment.cancelledAt,
+    cancelledBy: appointment.cancelledBy,
+    timestamp: appointment.timestamp,
+    createdAt: appointment.createdAt,
+    updatedAt: appointment.updatedAt
+  };
 }
 
 export function barberToApi(value) {
-  return plain(value);
+  const barber = plain(value);
+  if (!barber) return barber;
+
+  return {
+    _id: barber._id,
+    name: barber.name,
+    phone: barber.phone,
+    specialties: barber.specialties,
+    active: barber.active,
+    createdAt: barber.createdAt,
+    updatedAt: barber.updatedAt
+  };
 }
 
 export function clientToApi(value) {
-  return plain(value);
+  const client = plain(value);
+  if (!client) return client;
+
+  return {
+    _id: client._id,
+    name: client.name,
+    phone: client.phone,
+    email: client.email,
+    createdAt: client.createdAt,
+    updatedAt: client.updatedAt
+  };
 }
 
 export function serviceToApi(value) {
-  return plain(value);
+  const service = plain(value);
+  if (!service) return service;
+
+  return {
+    _id: service._id,
+    name: service.name,
+    price: service.price,
+    duration: service.duration,
+    active: service.active,
+    createdAt: service.createdAt,
+    updatedAt: service.updatedAt
+  };
 }

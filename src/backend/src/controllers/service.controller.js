@@ -1,10 +1,16 @@
-import { Service } from "../models/service.model.js";
 import { HttpError } from "../utils/httpError.js";
 import { serviceToApi } from "../utils/apiSerializers.js";
+import { sendData, sendMessage } from "../utils/apiResponse.js";
+import {
+  createServiceRecord,
+  deactivateServiceById,
+  findActiveServices,
+  updateServiceById
+} from "../services/service.service.js";
 
 export async function listServices(req, res) {
-  const services = await Service.find({ active: true }).sort({ createdAt: 1 }).lean();
-  res.json({ success: true, data: services.map(serviceToApi) });
+  const services = await findActiveServices();
+  return sendData(res, services.map(serviceToApi));
 }
 
 export async function createService(req, res) {
@@ -14,8 +20,13 @@ export async function createService(req, res) {
     throw new HttpError(400, "Name, price and duration are required.");
   }
 
-  const service = await Service.create({ name, price, duration });
-  res.status(201).json({ success: true, data: serviceToApi(service) });
+  const service = await createServiceRecord({
+    name,
+    price,
+    duration,
+    active: req.body.active
+  });
+  return sendData(res, serviceToApi(service), 201);
 }
 
 export async function updateService(req, res) {
@@ -25,28 +36,21 @@ export async function updateService(req, res) {
   if (req.body.duration !== undefined) updateData.duration = req.body.duration;
   if (req.body.active !== undefined) updateData.active = req.body.active;
 
-  const service = await Service.findByIdAndUpdate(req.params.id, updateData, {
-    new: true,
-    runValidators: true
-  });
+  const service = await updateServiceById(req.params.id, updateData);
 
   if (!service) {
     throw new HttpError(404, "Service not found.");
   }
 
-  res.json({ success: true, data: serviceToApi(service) });
+  return sendData(res, serviceToApi(service));
 }
 
 export async function deleteService(req, res) {
-  const service = await Service.findByIdAndUpdate(
-    req.params.id,
-    { active: false },
-    { new: true }
-  );
+  const service = await deactivateServiceById(req.params.id);
 
   if (!service) {
     throw new HttpError(404, "Service not found.");
   }
 
-  res.json({ success: true, message: "Service deactivated successfully." });
+  return sendMessage(res, "Service deactivated successfully.");
 }

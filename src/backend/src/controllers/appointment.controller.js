@@ -4,6 +4,7 @@ import { HttpError } from "../utils/httpError.js";
 import { resolveServiceDetails } from "../services/serviceCatalog.service.js";
 import { getAvailableSlots } from "../services/availability.service.js";
 import { appointmentToApi } from "../utils/apiSerializers.js";
+import { sendData, sendMessage } from "../utils/apiResponse.js";
 import {
   BLOCKING_APPOINTMENT_STATUSES,
   VALID_APPOINTMENT_STATUSES,
@@ -29,7 +30,7 @@ export async function listAppointments(req, res) {
     .sort({ date: 1, time: 1 })
     .lean();
 
-  res.json({ success: true, data: appointments.map(appointmentToApi) });
+  return sendData(res, appointments.map(appointmentToApi));
 }
 
 export async function listPublicSchedule(req, res) {
@@ -43,7 +44,7 @@ export async function listPublicSchedule(req, res) {
     .lean();
 
   res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-  res.json({ success: true, data: appointments.map(appointmentToApi) });
+  return sendData(res, appointments.map(appointmentToApi));
 }
 
 export async function createAppointment(req, res) {
@@ -62,11 +63,11 @@ export async function createAppointment(req, res) {
   if (idempotencyKey) {
     const existing = await Appointment.findOne({ idempotencyKey }).lean();
     if (existing) {
-      return res.status(200).json({
-        success: true,
-        message: "Appointment already registered.",
-        data: appointmentToApi(existing)
-      });
+      return sendMessage(
+        res,
+        "Appointment already registered.",
+        appointmentToApi(existing)
+      );
     }
   }
 
@@ -134,11 +135,11 @@ export async function createAppointment(req, res) {
     if (error?.code === 11000 && idempotencyKey) {
       const existing = await Appointment.findOne({ idempotencyKey }).lean();
       if (existing) {
-        return res.status(200).json({
-          success: true,
-          message: "Appointment already registered.",
-          data: appointmentToApi(existing)
-        });
+        return sendMessage(
+          res,
+          "Appointment already registered.",
+          appointmentToApi(existing)
+        );
       }
     }
     throw error;
@@ -146,11 +147,12 @@ export async function createAppointment(req, res) {
 
   await syncAppointmentClient({ name: nome, phone: telefone });
 
-  res.status(201).json({
-    success: true,
-    message: "Appointment saved successfully.",
-    data: appointmentToApi(appointment)
-  });
+  return sendMessage(
+    res,
+    "Appointment saved successfully.",
+    appointmentToApi(appointment),
+    201
+  );
 }
 
 export async function updateAppointment(req, res) {
@@ -272,11 +274,11 @@ export async function updateAppointment(req, res) {
     runValidators: true
   });
 
-  res.json({
-    success: true,
-    message: "Appointment updated successfully.",
-    data: appointmentToApi(appointment)
-  });
+  return sendMessage(
+    res,
+    "Appointment updated successfully.",
+    appointmentToApi(appointment)
+  );
 }
 
 export async function deleteAppointment(req, res) {
@@ -303,11 +305,11 @@ export async function deleteAppointment(req, res) {
     throw new HttpError(404, "Appointment not found.");
   }
 
-  res.json({
-    success: true,
-    message: "Appointment cancelled successfully.",
-    data: appointmentToApi(appointment)
-  });
+  return sendMessage(
+    res,
+    "Appointment cancelled successfully.",
+    appointmentToApi(appointment)
+  );
 }
 
 export async function listAvailableSlots(req, res) {
@@ -318,6 +320,6 @@ export async function listAvailableSlots(req, res) {
   }
 
   const horarios = await getAvailableSlots({ data: date, barbeiro: barber });
-  res.json({ success: true, data: horarios });
+  return sendData(res, horarios);
 }
 

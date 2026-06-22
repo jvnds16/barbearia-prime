@@ -2,7 +2,6 @@ import { app } from "./app.js";
 import { connectDatabase } from "./config/database.js";
 import { env, validateProductionEnv } from "./config/env.js";
 import { seedDefaultServices } from "./services/serviceCatalog.service.js";
-import { migrateModelFieldsToEnglish } from "./services/modelMigration.service.js";
 import mongoose from "mongoose";
 
 async function bootstrap() {
@@ -10,7 +9,6 @@ async function bootstrap() {
 
   try {
     await connectDatabase();
-    await migrateModelFieldsToEnglish();
     await seedDefaultServices();
   } catch (error) {
     if (env.nodeEnv === "production") throw error;
