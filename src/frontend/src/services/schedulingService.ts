@@ -106,7 +106,7 @@ export const schedulingService = {
     }
 
     const send = () =>
-      apiRequest<ApiResponse<ApiAppointment>>("/scheduling", {
+      apiRequest<ApiResponse<ApiAppointment>>("/appointments", {
         method: "POST",
         headers,
         body: JSON.stringify(appointmentToApi(appointment))
@@ -125,16 +125,16 @@ export const schedulingService = {
   },
 
   async update(id: string, appointment: Partial<Agendamento>) {
-    const response = await apiRequest<ApiResponse<ApiAppointment>>("/scheduling", {
+    const response = await apiRequest<ApiResponse<ApiAppointment>>(`/appointments/${id}`, {
       method: "PUT",
       auth: true,
-      body: JSON.stringify({ id, ...appointmentToApi(appointment) })
+      body: JSON.stringify(appointmentToApi(appointment))
     });
     return mapAppointmentResponse(response);
   },
 
   async remove(id: string) {
-    const response = await apiRequest<ApiResponse<ApiAppointment>>(`/scheduling?id=${id}`, {
+    const response = await apiRequest<ApiResponse<ApiAppointment>>(`/appointments/${id}`, {
       method: "DELETE",
       auth: true
     });

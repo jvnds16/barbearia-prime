@@ -1,21 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Scissors, LogOut, Trash2, Edit, X, Save, Clock, User, Phone, Home, TrendingUp, Calendar, Plus, Eye, EyeOff, RotateCcw } from 'lucide-react';
-
-import { authService } from '../services/authService';
-import { schedulingService } from '../services/schedulingService';
-import { defaultServices, listServices } from '../services/serviceCatalog';
-import { Agendamento, DashboardStats, Servico } from '../types/scheduling';
+import { Scissors, Trash2, Edit, X, Save, Clock, User, Phone, TrendingUp, Calendar, Plus, RotateCcw } from 'lucide-react';
 import { ModernDatePicker } from '../components/ModernDatePicker';
-import { ApiError } from '../services/api';
-import { calculateDashboardStats } from '../utils/dashboard';
-import { formatDisplayDate, toDateValue } from '../utils/date';
-
-type AdminMessage = {
-  type: 'success' | 'error';
-  text: string;
-} | null;
-
-type EditErrors = Partial<Record<'nome' | 'telefone' | 'servico' | 'preco' | 'data' | 'horario', string>>;
+import { formatDisplayDate } from '../utils/date';
+import { useAdminPanel } from '../hooks/useAdminPanel';
+import { Agendamento } from '../types/scheduling';
+import { AdminLogin } from '../components/admin/AdminLogin';
+import { AdminHeader, AdminMessageToast, AdminTabs, DeleteAppointmentModal } from '../components/admin/AdminChrome';
 
 const appointmentStatusClasses: Record<NonNullable<Agendamento['status']>, string> = {
   pendente: 'bg-yellow-500/20 text-yellow-500',
@@ -32,284 +21,16 @@ const appointmentStatusLabels: Record<NonNullable<Agendamento['status']>, string
 };
 
 function Admin() {
-  const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [checkingAuth, setCheckingAuth] = useState(true);
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<Agendamento | null>(null);
-  const [filterDate, setFilterDate] = useState(() => toDateValue(new Date()));
-  const [clearingFilter, setClearingFilter] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<AdminMessage>(null);
-  const [deleteTarget, setDeleteTarget] = useState<Agendamento | null>(null);
-  const [editErrors, setEditErrors] = useState<EditErrors>({});
-  const [servicos, setServicos] = useState<Servico[]>(defaultServices);
-  const [activeTab, setActiveTab] = useState<'agendamentos' | 'dashboard'>('dashboard');
-  const loadingAppointmentsRef = useRef(false);
-  const [dashboardStats, setDashboardStats] = useState<DashboardStats>({
-    lucroHoje: 0,
-    lucroMensal: 0,
-    totalAgendamentos: 0,
-    mediaDiaria: 0,
-    agendamentosHoje: 0,
-    agendamentosMes: 0,
-    atendimentosHoje: 0,
-    atendimentosMes: 0,
-    pendentesMes: 0,
-    ausentesMes: 0,
-    lucrosPorDia: {},
-    servicosMaisPopulares: []
-  });
-  const hoje = new Date();
-  const dataHoje = toDateValue(hoje);
-  const limiteEdicao = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + 30);
-  const dataLimiteEdicao = `${limiteEdicao.getFullYear()}-${String(limiteEdicao.getMonth() + 1).padStart(2, '0')}-${String(limiteEdicao.getDate()).padStart(2, '0')}`;
-  const horariosPermitidos = Array.from({ length: 23 }, (_, index) => {
-    const totalMinutes = 8 * 60 + index * 30;
-    const hour = Math.floor(totalMinutes / 60);
-    const minute = totalMinutes % 60;
-    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-  }).filter((horario) => !horario.startsWith('12:'));
-
-  useEffect(() => {
-    document.title = 'Painel Admin | Barbearia Prime';
-  }, []);
-
-  useEffect(() => {
-    if (!message) return;
-
-    const timeout = window.setTimeout(() => {
-      setMessage(null);
-    }, 3000);
-
-    return () => window.clearTimeout(timeout);
-  }, [message]);
-
-  useEffect(() => {
-    authService.getSession()
-      .then(() => setIsAuthenticated(true))
-      .catch(() => authService.logout())
-      .finally(() => setCheckingAuth(false));
-  }, []);
-
-  useEffect(() => {
-    listServices()
-      .then((result) => {
-        if (result.success && result.data.length) setServicos(result.data);
-      })
-      .catch(() => setServicos(defaultServices));
-  }, []);
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    loadAgendamentos();
-    const interval = window.setInterval(() => loadAgendamentos(true), 30000);
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [isAuthenticated]);
-
-  const loadAgendamentos = async (silent = false) => {
-    if (loadingAppointmentsRef.current) return;
-
-    loadingAppointmentsRef.current = true;
-    if (!silent) setLoading(true);
-
-    try {
-      const { data, success } = await schedulingService.listAdmin();
-      if (success) {
-        setAgendamentos(data);
-        setDashboardStats(calculateDashboardStats(data));
-        setMessage((current) =>
-          current?.text === 'Não foi possível atualizar os dados do painel.' ? null : current
-        );
-      }
-    } catch (error) {
-      console.error('Erro ao carregar agendamentos:', error);
-      if (error instanceof ApiError && error.status === 401) {
-        authService.logout();
-        setIsAuthenticated(false);
-        setMessage({ type: 'error', text: 'Sua sessão expirou. Entre novamente.' });
-        return;
-      }
-
-      if (!silent) {
-        setMessage({ type: 'error', text: 'Não foi possível atualizar os dados do painel.' });
-      }
-    } finally {
-      loadingAppointmentsRef.current = false;
-      if (!silent) setLoading(false);
-    }
-  };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!password.trim()) {
-      setMessage({ type: 'error', text: 'Informe a senha de administrador para entrar.' });
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      await Promise.all([
-        authService.login(password),
-        new Promise((resolve) => window.setTimeout(resolve, 700))
-      ]);
-      setIsAuthenticated(true);
-      setPassword('');
-      setMessage(null);
-    } catch (error: unknown) {
-      setMessage({
-        type: 'error',
-        text: error instanceof Error ? error.message : 'Não foi possível entrar.'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleLogout = () => {
-    authService.logout();
-    setIsAuthenticated(false);
-    setEditingId(null);
-    setEditForm(null);
-  };
-
-  const handleEdit = (agendamento: Agendamento) => {
-    if (agendamento._id) {
-      setEditingId(agendamento._id);
-      setEditForm({ ...agendamento });
-      setEditErrors({});
-      setMessage(null);
-
-      if (activeTab === 'dashboard') {
-        setFilterDate(agendamento.data);
-        setActiveTab('agendamentos');
-      }
-    }
-  };
-
-  const handleClearFilter = () => {
-    if (clearingFilter) return;
-
-    setFilterDate('');
-    setClearingFilter(true);
-    window.setTimeout(() => setClearingFilter(false), 500);
-  };
-
-  const validateEditForm = () => {
-    if (!editForm) return false;
-
-    const nextErrors: EditErrors = {};
-    const nome = editForm.nome.trim().replace(/\s+/g, ' ');
-    const telefone = editForm.telefone.replace(/\D/g, '');
-    const original = agendamentos.find((appointment) => appointment._id === editingId);
-
-    if (nome.length < 3 || nome.split(' ').length < 2) nextErrors.nome = 'Informe nome e sobrenome.';
-    if (!/^[1-9]{2}(?:[2-8]|9[1-9])[0-9]{7,8}$/.test(telefone)) nextErrors.telefone = 'Telefone inválido com DDD.';
-    if (!servicos.some((servico) => servico.nome === editForm.servico)) nextErrors.servico = 'Selecione um serviço válido.';
-    if (!editForm.preco || editForm.preco < 0) nextErrors.preco = 'Informe um preço válido.';
-    if (!editForm.data) {
-      nextErrors.data = 'Escolha uma data.';
-    } else if (editForm.data !== original?.data && (editForm.data < dataHoje || editForm.data > dataLimiteEdicao)) {
-      nextErrors.data = 'Escolha uma data entre hoje e os próximos 30 dias.';
-    }
-    if (!horariosPermitidos.includes(editForm.horario)) nextErrors.horario = 'Escolha um horário válido.';
-
-    setEditErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
-  };
-
-  const handleSave = async () => {
-    if (!editForm || !editingId) return;
-    if (!validateEditForm()) {
-      setMessage({ type: 'error', text: 'Revise os campos destacados antes de salvar.' });
-      return;
-    }
-
-    setLoading(true);
-    try {
-      // Remove o campo _id do objeto que será enviado para atualização
-      const updateData = { ...editForm };
-      delete updateData._id;
-      const result = await schedulingService.update(editingId, updateData);
-
-      if (result.success) {
-        const updatedAgendamentos = agendamentos.map(a =>
-          a._id === editingId ? { ...result.data } : a
-        );
-        setAgendamentos(updatedAgendamentos);
-        setDashboardStats(calculateDashboardStats(updatedAgendamentos));
-
-        setEditingId(null);
-        setEditForm(null);
-        setEditErrors({});
-        setMessage({ type: 'success', text: 'Agendamento atualizado com sucesso.' });
-      } else {
-        throw new Error(result.error || 'Erro desconhecido');
-      }
-    } catch (error: unknown) {
-      console.error('Erro ao atualizar agendamento:', error);
-      setMessage({
-        type: 'error',
-        text: error instanceof Error ? error.message : 'Não foi possível atualizar o agendamento.'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    setLoading(true);
-    try {
-      const result = await schedulingService.remove(id);
-
-      if (result.success) {
-        const updatedAgendamentos = agendamentos.map(a =>
-          a._id === id ? result.data : a
-        );
-        setAgendamentos(updatedAgendamentos);
-        setDashboardStats(calculateDashboardStats(updatedAgendamentos));
-
-        setDeleteTarget(null);
-        setMessage({ type: 'success', text: 'Agendamento cancelado com sucesso.' });
-      } else {
-        throw new Error(result.error || 'Erro desconhecido');
-      }
-    } catch (error: unknown) {
-      console.error('Erro ao excluir agendamento:', error);
-      setMessage({
-        type: 'error',
-        text: error instanceof Error ? error.message : 'Não foi possível excluir o agendamento.'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleEditChange = (field: keyof Agendamento, value: string | number) => {
-    if (!editForm || field === '_id') return; // Impede modificação do _id
-
-    const selectedService = field === 'servico'
-      ? servicos.find((servico) => servico.nome === value)
-      : undefined;
-    const newForm = {
-      ...editForm,
-      [field]: value,
-      ...(selectedService ? { preco: selectedService.preco } : {})
-    };
-    setEditForm(newForm);
-    setEditErrors((current) => {
-      const next = { ...current };
-      delete next[field as keyof EditErrors];
-      return next;
-    });
-  };
+  const {
+    activeTab, agendamentos, agendamentosFiltrados, agendamentosOrdenados,
+    agendamentosRecentes, cancelEdit, checkingAuth, clearingFilter,
+    dashboardStats, dataHoje, dataLimiteEdicao, dataMaximaFiltro, dataMinimaFiltro,
+    deleteTarget, editErrors, editForm, editingId, filterDate, handleClearFilter,
+    handleDelete, handleEdit, handleEditChange, handleLogin, handleLogout, handleSave,
+    horariosPermitidos, isAuthenticated, loading, message, password, servicos,
+    setActiveTab, setDeleteTarget, setFilterDate, setMessage, setPassword,
+    setShowPassword, showPassword
+  } = useAdminPanel();
 
   const formatarMoeda = (valor: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -317,31 +38,6 @@ function Admin() {
       currency: 'BRL'
     }).format(valor);
   };
-
-  // Agendamentos filtrados e ordenados
-  const agendamentosFiltrados = filterDate
-    ? agendamentos.filter(a => a.data === filterDate)
-    : agendamentos;
-
-  const agendamentosOrdenados = [...agendamentosFiltrados].sort((a, b) => {
-    if (a.data !== b.data) return a.data.localeCompare(b.data);
-    return a.horario.localeCompare(b.horario);
-  });
-  const agendamentosRecentes = [...agendamentos]
-    .sort((a, b) => {
-      if (a.timestamp !== b.timestamp) return (b.timestamp || 0) - (a.timestamp || 0);
-      if (a.data !== b.data) return b.data.localeCompare(a.data);
-      return b.horario.localeCompare(a.horario);
-    })
-    .slice(0, 5);
-  const dataMinimaFiltro = agendamentos.reduce(
-    (earliest, appointment) => appointment.data < earliest ? appointment.data : earliest,
-    `${hoje.getFullYear() - 5}-01-01`
-  );
-  const dataMaximaFiltro = agendamentos.reduce(
-    (latest, appointment) => appointment.data > latest ? appointment.data : latest,
-    `${hoje.getFullYear() + 1}-12-31`
-  );
 
   if (checkingAuth) {
     return (
@@ -356,264 +52,30 @@ function Admin() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        {loading && (
-          <div
-            className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="admin-login-loading-title"
-            aria-describedby="admin-login-loading-description"
-          >
-            <div className="w-full max-w-sm rounded-2xl border border-zinc-700 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7 text-center shadow-2xl shadow-black/70">
-              <div className="relative mx-auto mb-5 flex h-16 w-16 items-center justify-center">
-                <span className="absolute inset-0 rounded-full border-4 border-amber-400/15" />
-                <span className="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-r-amber-400/60 border-t-amber-400" />
-                <LogOut className="h-6 w-6 rotate-180 text-amber-300" />
-              </div>
-              <h2 id="admin-login-loading-title" className="text-xl font-bold text-white">
-                Entrando no painel
-              </h2>
-              <p id="admin-login-loading-description" className="mt-2 text-sm leading-6 text-zinc-400">
-                Aguarde enquanto verificamos seu acesso.
-              </p>
-              <div className="mt-5 flex items-center justify-center gap-1.5" aria-hidden="true">
-                {[0, 1, 2].map((item) => (
-                  <span
-                    key={item}
-                    className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400"
-                    style={{ animationDelay: `${item * 160}ms` }}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="bg-zinc-900 p-8 rounded-lg max-w-md w-full mx-4">
-          <div className="flex items-center justify-center mb-6">
-            <img src='/logo.png' className="h-20 w-26 text-amber-500 bg-amber-500 mr-3" />
-            <h1 className="text-2xl font-bold">Admin Prime</h1>
-          </div>
-
-          <form onSubmit={handleLogin} className="space-y-4" noValidate>
-            {message && (
-              <div id="admin-login-alert" role="alert" className={`rounded-lg border p-3 text-sm ${
-                message.type === 'error'
-                  ? 'border-red-500/40 bg-red-500/10 text-red-300'
-                  : 'border-green-500/40 bg-green-500/10 text-green-300'
-              }`}>
-                {message.text}
-              </div>
-            )}
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">
-                Senha de administrador
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    if (message?.type === 'error') setMessage(null);
-                  }}
-                  className={`w-full rounded-md border bg-zinc-800 px-4 py-3 pr-12 outline-none transition focus:ring-2 ${
-                    message?.type === 'error' && !password.trim()
-                      ? 'border-red-400 focus:border-red-300 focus:ring-red-400/30'
-                      : 'border-transparent focus:border-amber-500 focus:ring-amber-500/30'
-                  }`}
-                  placeholder="Digite a senha"
-                  autoComplete="current-password"
-                  aria-invalid={message?.type === 'error' && !password.trim()}
-                  aria-describedby={message?.type === 'error' ? 'admin-login-alert' : undefined}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((current) => !current)}
-                  className="absolute right-1.5 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-700 hover:text-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-400/40"
-                  aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
-                  aria-pressed={showPassword}
-                  title={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
-                >
-                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-amber-500 text-black py-3 rounded-md font-semibold hover:bg-amber-600 transition disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? 'Entrando...' : 'Entrar'}
-            </button>
-          </form>
-
-          {/* Botão para voltar ao site principal */}
-          <div className="mt-6 pt-4 border-t border-zinc-700">
-            <a
-              href="/"
-              className="w-full flex items-center justify-center gap-2 bg-zinc-700 hover:bg-zinc-600 text-white py-3 rounded-md font-semibold transition"
-            >
-              <Home className="h-4 w-4" />
-              Voltar para o site
-            </a>
-          </div>
-
-          <p className="text-white text-sm mt-4 text-center">
-            Acesso restrito ao barbeiro
-          </p>
-        </div>
-      </div>
+      <AdminLogin
+        loading={loading}
+        message={message}
+        password={password}
+        showPassword={showPassword}
+        onSubmit={handleLogin}
+        onPasswordChange={setPassword}
+        onClearMessage={() => setMessage(null)}
+        onTogglePassword={() => setShowPassword((current) => !current)}
+      />
     );
   }
 
   return (
     <div className="min-h-screen bg-black text-white">
-      {message && (
-        <div className={`fixed right-4 top-4 z-[100] flex max-w-sm items-start gap-3 rounded-xl border p-4 shadow-2xl ${
-          message.type === 'error'
-            ? 'border-red-500/40 bg-red-950 text-red-200'
-            : 'border-green-500/40 bg-green-950 text-green-200'
-        }`}>
-          <span className="text-sm font-semibold">{message.text}</span>
-          <button type="button" onClick={() => setMessage(null)} aria-label="Fechar mensagem">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-
-      {deleteTarget && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-950 p-6 shadow-2xl">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-500/15 text-red-300">
-              <Trash2 className="h-6 w-6" />
-            </div>
-            <h2 className="mt-4 text-center text-xl font-bold">Cancelar agendamento?</h2>
-            <p className="mt-2 text-center text-sm text-zinc-400">
-              O agendamento de <strong className="text-white">{deleteTarget.nome}</strong> será marcado como cancelado e permanecerá no histórico.
-            </p>
-            <div className="mt-6 flex gap-3">
-              <button
-                type="button"
-                onClick={() => setDeleteTarget(null)}
-                disabled={loading}
-                className="flex-1 rounded-lg border border-zinc-700 px-4 py-3 font-semibold text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={() => deleteTarget._id && handleDelete(deleteTarget._id)}
-                disabled={loading || !deleteTarget._id}
-                className="flex-1 rounded-lg bg-red-600 px-4 py-3 font-bold text-white hover:bg-red-500 disabled:opacity-50"
-              >
-                {loading ? 'Cancelando...' : 'Cancelar agendamento'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Header */}
-     <header className="bg-zinc-900 border-b border-zinc-700">
-  <div className="container mx-auto px-6 py-4">
-
-    {/* MOBILE: coluna */}
-    <div className="flex flex-col items-center text-center md:hidden space-y-4">
-
-      {/* Logo e textos centralizados */}
-      <div className="flex flex-col items-center space-y-1">
-        <img src="/logo.png" className="h-12 w-12 rounded-full bg-amber-500" />
-        <h1 className="text-2xl font-bold">Painel Admin</h1>
-        <p className="text-white text-sm">
-          Gerencie os agendamentos e finanças
-        </p>
-      </div>
-
-      {/* Botões ocupando toda largura */}
-      <div className="w-full flex flex-col space-y-3">
-        <a
-          href="/"
-          className="flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 w-full px-4 py-2 rounded-md transition"
-        >
-          <Home className="h-5 w-5" />
-          <span>Voltar ao site</span>
-        </a>
-
-        <button
-          onClick={handleLogout}
-          className="flex items-center justify-center space-x-2 bg-red-600 hover:bg-red-700 w-full px-4 py-2 rounded-md transition"
-        >
-          <LogOut className="h-5 w-5" />
-          <span>Sair</span>
-        </button>
-      </div>
-    </div>
-
-    {/* DESKTOP: linha */}
-    <div className="hidden md:flex justify-between items-center">
-
-      {/* Logo + Títulos */}
-      <div className="flex items-center space-x-3">
-        <img src="/logo.png" className="h-10 w-10 rounded-full bg-amber-500" />
-        <div>
-          <h1 className="text-2xl font-bold">Painel Admin</h1>
-          <p className="text-white text-sm">Gerencie os agendamentos e finanças</p>
-        </div>
-      </div>
-
-      {/* Botões */}
-      <div className="flex items-center space-x-3">
-        <a
-          href="/"
-          className="flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-md transition"
-        >
-          <Home className="h-5 w-5" />
-          <span>Voltar ao site</span>
-        </a>
-
-        <button
-          onClick={handleLogout}
-          className="flex items-center justify-center space-x-2 bg-red-600 hover:bg-red-700 px-4 py-2 rounded-md transition"
-        >
-          <LogOut className="h-5 w-5" />
-          <span>Sair</span>
-        </button>
-      </div>
-
-    </div>
-
-  </div>
-</header>
-
-
-      {/* Tabs */}
-      <div className="container mx-auto px-6 pt-6">
-        <div className="flex space-x-4 mb-6">
-          <button
-            onClick={() => setActiveTab('dashboard')}
-            className={`px-6 py-3 rounded-md font-semibold transition flex items-center gap-2 ${activeTab === 'dashboard'
-                ? 'bg-amber-500 text-black'
-                : 'bg-zinc-800 text-white hover:bg-zinc-700'
-              }`}
-          >
-            <TrendingUp className="h-5 w-5" />
-            Dashboard
-          </button>
-          <button
-            onClick={() => setActiveTab('agendamentos')}
-            className={`px-6 py-3 rounded-md font-semibold transition flex items-center gap-2 ${activeTab === 'agendamentos'
-                ? 'bg-amber-500 text-black'
-                : 'bg-zinc-800 text-white hover:bg-zinc-700'
-              }`}
-          >
-            <Calendar className="h-5 w-5" />
-            Agendamentos
-          </button>
-        </div>
-      </div>
+      <AdminMessageToast message={message} onClose={() => setMessage(null)} />
+      <DeleteAppointmentModal
+        target={deleteTarget}
+        loading={loading}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+      />
+      <AdminHeader onLogout={handleLogout} />
+      <AdminTabs activeTab={activeTab} onChange={setActiveTab} />
 
       {activeTab === 'dashboard' ? (
         /* Dashboard */
@@ -1012,9 +474,7 @@ function Admin() {
                             </button>
                             <button
                               onClick={() => {
-                                 setEditingId(null);
-                                 setEditForm(null);
-                                 setEditErrors({});
+                                 cancelEdit();
                               }}
                               disabled={loading}
                               className="flex items-center space-x-2 bg-zinc-700 hover:bg-zinc-600 px-4 py-2 rounded-md transition disabled:opacity-50"

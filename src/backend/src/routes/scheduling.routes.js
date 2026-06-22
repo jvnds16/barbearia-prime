@@ -11,6 +11,7 @@ import { schedulingLimiter } from "../middlewares/rateLimiters.js";
 
 export const schedulingRoutes = Router();
 
+// Compatibilidade temporária com clientes antigos. Novas mutações usam /appointments.
 schedulingRoutes.get("/", asyncHandler(listPublicSchedule));
 schedulingRoutes.post("/", schedulingLimiter, asyncHandler(createAppointment));
 schedulingRoutes.put("/", requireAuth, asyncHandler(updateAppointment));

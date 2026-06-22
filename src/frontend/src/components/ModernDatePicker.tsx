@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { IconCalendarEvent } from "@tabler/icons-react";
+import { useDatePicker } from "../hooks/useDatePicker";
+import { parseLocalDate, toDateValue } from "../utils/date";
 
 type ModernDatePickerProps = {
   value: string;
@@ -11,24 +12,6 @@ type ModernDatePickerProps = {
   ariaLabel?: string;
 };
 
-const parseLocalDate = (value: string) => new Date(`${value}T00:00:00`);
-
-const toDateValue = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
-
-const getInitialVisibleDate = (value: string, min: string, max: string) => {
-  if (value) return parseLocalDate(value);
-
-  const todayValue = toDateValue(new Date());
-  if (todayValue >= min && todayValue <= max) return parseLocalDate(todayValue);
-
-  return parseLocalDate(min);
-};
-
 export function ModernDatePicker({
   value,
   min,
@@ -37,63 +20,11 @@ export function ModernDatePicker({
   placeholder = "Escolha uma data",
   ariaLabel = "Escolher data"
 }: ModernDatePickerProps) {
-  const [open, setOpen] = useState(false);
-  const [visibleMonth, setVisibleMonth] = useState(() => {
-    const initialDate = getInitialVisibleDate(value, min, max);
-    return new Date(initialDate.getFullYear(), initialDate.getMonth(), 1);
-  });
-  const containerRef = useRef<HTMLDivElement>(null);
-  const minDate = parseLocalDate(min);
-  const maxDate = parseLocalDate(max);
-  const selectedDate = value ? parseLocalDate(value) : null;
-  const todayValue = toDateValue(new Date());
-
-  useEffect(() => {
-    if (!open) return;
-
-    const closeOnOutsideClick = (event: MouseEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-
-    document.addEventListener("mousedown", closeOnOutsideClick);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("mousedown", closeOnOutsideClick);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    const nextDate = getInitialVisibleDate(value, min, max);
-    setVisibleMonth(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1));
-  }, [value, min, max]);
-
-  const monthStart = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1);
-  const gridStart = new Date(monthStart);
-  gridStart.setDate(1 - monthStart.getDay());
-
-  const days = Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(gridStart);
-    date.setDate(gridStart.getDate() + index);
-    return date;
-  });
-
-  const previousMonth = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1);
-  const nextMonth = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1);
-  const minMonth = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
-  const maxMonth = new Date(maxDate.getFullYear(), maxDate.getMonth(), 1);
-  const canGoPrevious = previousMonth >= minMonth;
-  const canGoNext = nextMonth <= maxMonth;
-  const monthTitle = visibleMonth.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
-  const formattedMonthTitle = monthTitle.charAt(0).toUpperCase() + monthTitle.slice(1);
-
-  const selectDate = (date: Date) => {
-    onChange(toDateValue(date));
-    setOpen(false);
-  };
+  const {
+    canGoNext, canGoPrevious, containerRef, days, maxDate, minDate, nextMonth,
+    open, previousMonth, selectedDate, selectDate, setOpen, setVisibleMonth,
+    todayValue, visibleMonth, formattedMonthTitle
+  } = useDatePicker({ value, min, max, onChange, preferToday: true });
 
   return (
     <div ref={containerRef} className="relative">
