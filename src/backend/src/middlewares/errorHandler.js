@@ -1,16 +1,33 @@
+import { env } from "../config/env.js";
+import { sendError } from "../utils/apiResponse.js";
+
 export function errorHandler(error, req, res, next) {
   if (error?.code === 11000 && (error?.keyPattern?.slotKey || error?.keyPattern?.slotKeys)) {
-    return res.status(409).json({
-      success: false,
-      error: "This time slot was just booked. Choose another one."
-    });
+    return sendError(res, 409, "This time slot was just booked. Choose another one.");
   }
 
   if (error?.code === 11000) {
-    return res.status(409).json({
-      success: false,
-      error: "A record with this data already exists."
-    });
+    return sendError(res, 409, "A record with this data already exists.");
+  }
+
+  if (error?.name === "CastError") {
+    return sendError(res, 400, "Invalid resource ID.");
+  }
+
+  if (error?.name === "ValidationError") {
+    const details = Object.entries(error.errors || {}).map(([field, value]) => ({
+      field,
+      message: value.message
+    }));
+    return sendError(res, 400, "Invalid data.", details);
+  }
+
+  if (error instanceof SyntaxError && error.status === 400 && "body" in error) {
+    return sendError(res, 400, "Invalid JSON body.");
+  }
+
+  if (error?.message === "Origin not allowed by CORS.") {
+    return sendError(res, 403, "Origin is not allowed.");
   }
 
   const statusCode = error.statusCode || (res.statusCode >= 400 ? res.statusCode : 500);
@@ -19,8 +36,10 @@ export function errorHandler(error, req, res, next) {
     console.error(error);
   }
 
-  res.status(statusCode).json({
-    success: false,
-    error: error.message || "Internal server error"
-  });
+  const message =
+    statusCode >= 500 && env.nodeEnv === "production"
+      ? "Internal server error"
+      : error.message || "Internal server error";
+
+  return sendError(res, statusCode, message, error.details);
 }

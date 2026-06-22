@@ -1,6 +1,12 @@
-import { Client } from "../models/client.model.js";
 import { HttpError } from "../utils/httpError.js";
 import { clientToApi } from "../utils/apiSerializers.js";
+import { sendData, sendMessage } from "../utils/apiResponse.js";
+import {
+  deleteClientById,
+  findClients,
+  updateClientById,
+  upsertClientByPhone
+} from "../services/client.service.js";
 
 function normalizeText(value) {
   return value.trim().replace(/\s+/g, " ");
@@ -31,20 +37,18 @@ export function validatePublicClient(body) {
 }
 
 export async function listClients(req, res) {
-  const clients = await Client.find().sort({ name: 1 }).lean();
-  res.json({ success: true, data: clients.map(clientToApi) });
+  const clients = await findClients();
+  return sendData(res, clients.map(clientToApi));
 }
 
 export async function createClient(req, res) {
-  const clientData = validatePublicClient(req.body);
+  const clientData = {
+    ...validatePublicClient(req.body),
+    ...(req.body.email ? { email: req.body.email } : {})
+  };
 
-  const client = await Client.findOneAndUpdate(
-    { phone: clientData.phone },
-    { $set: clientData },
-    { new: true, upsert: true, runValidators: true }
-  );
-
-  res.status(201).json({ success: true, data: clientToApi(client) });
+  const client = await upsertClientByPhone(clientData);
+  return sendData(res, clientToApi(client), 201);
 }
 
 export async function updateClient(req, res) {
@@ -53,24 +57,21 @@ export async function updateClient(req, res) {
   if (req.body.phone !== undefined) updateData.phone = req.body.phone;
   if (req.body.email !== undefined) updateData.email = req.body.email;
 
-  const client = await Client.findByIdAndUpdate(req.params.id, updateData, {
-    new: true,
-    runValidators: true
-  });
+  const client = await updateClientById(req.params.id, updateData);
 
   if (!client) {
     throw new HttpError(404, "Client not found.");
   }
 
-  res.json({ success: true, data: clientToApi(client) });
+  return sendData(res, clientToApi(client));
 }
 
 export async function deleteClient(req, res) {
-  const client = await Client.findByIdAndDelete(req.params.id);
+  const client = await deleteClientById(req.params.id);
 
   if (!client) {
     throw new HttpError(404, "Client not found.");
   }
 
-  res.json({ success: true, message: "Client deleted successfully." });
+  return sendMessage(res, "Client deleted successfully.");
 }

@@ -8,11 +8,37 @@ import {
 import { requireAuth } from "../middlewares/authMiddleware.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { schedulingLimiter } from "../middlewares/rateLimiters.js";
+import { validateRequest } from "../middlewares/validateRequest.js";
+import {
+  appointmentCreateSchema,
+  appointmentUpdateSchema,
+  legacyDeleteQuerySchema,
+  publicScheduleQuerySchema
+} from "../validation/schemas.js";
 
 export const schedulingRoutes = Router();
 
 // Compatibilidade temporária com clientes antigos. Novas mutações usam /appointments.
-schedulingRoutes.get("/", asyncHandler(listPublicSchedule));
-schedulingRoutes.post("/", schedulingLimiter, asyncHandler(createAppointment));
-schedulingRoutes.put("/", requireAuth, asyncHandler(updateAppointment));
-schedulingRoutes.delete("/", requireAuth, asyncHandler(deleteAppointment));
+schedulingRoutes.get(
+  "/",
+  validateRequest(publicScheduleQuerySchema, "query"),
+  asyncHandler(listPublicSchedule)
+);
+schedulingRoutes.post(
+  "/",
+  schedulingLimiter,
+  validateRequest(appointmentCreateSchema),
+  asyncHandler(createAppointment)
+);
+schedulingRoutes.put(
+  "/",
+  requireAuth,
+  validateRequest(appointmentUpdateSchema),
+  asyncHandler(updateAppointment)
+);
+schedulingRoutes.delete(
+  "/",
+  requireAuth,
+  validateRequest(legacyDeleteQuerySchema, "query"),
+  asyncHandler(deleteAppointment)
+);

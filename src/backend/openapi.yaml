@@ -1,0 +1,243 @@
+openapi: 3.1.0
+info:
+  title: Barbearia Prime API
+  version: 1.0.0
+  description: API de autenticação, catálogo e agendamentos da Barbearia Prime.
+servers:
+  - url: /api
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      security: []
+      summary: Verifica a API e a conexão com o banco
+      responses:
+        "200": { description: Serviço saudável }
+        "503": { description: Serviço degradado }
+  /auth/login:
+    post:
+      security: []
+      summary: Autentica o administrador
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { type: string }
+      responses:
+        "200": { description: Token emitido }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /auth/me:
+    get:
+      summary: Retorna a sessão administrativa
+      responses:
+        "200": { description: Sessão válida }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /services:
+    get:
+      security: []
+      summary: Lista serviços ativos
+      responses:
+        "200": { description: Serviços }
+    post:
+      summary: Cria um serviço
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ServiceInput" }
+      responses:
+        "201": { description: Serviço criado }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /services/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ResourceId"
+    put:
+      summary: Atualiza um serviço
+      responses:
+        "200": { description: Serviço atualizado }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Desativa um serviço
+      responses:
+        "200": { description: Serviço desativado }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /barbers:
+    get:
+      security: []
+      summary: Lista barbeiros ativos
+      responses:
+        "200": { description: Barbeiros }
+    post:
+      summary: Cria um barbeiro
+      responses:
+        "201": { description: Barbeiro criado }
+        "400": { $ref: "#/components/responses/BadRequest" }
+  /barbers/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ResourceId"
+    put:
+      summary: Atualiza um barbeiro
+      responses:
+        "200": { description: Barbeiro atualizado }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Desativa um barbeiro
+      responses:
+        "200": { description: Barbeiro desativado }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /clients:
+    get:
+      summary: Lista clientes
+      responses:
+        "200": { description: Clientes }
+    post:
+      summary: Cria ou atualiza um cliente pelo telefone
+      responses:
+        "201": { description: Cliente salvo }
+        "400": { $ref: "#/components/responses/BadRequest" }
+  /clients/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ResourceId"
+    put:
+      summary: Atualiza um cliente
+      responses:
+        "200": { description: Cliente atualizado }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Exclui um cliente
+      responses:
+        "200": { description: Cliente excluído }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /appointments:
+    get:
+      summary: Lista agendamentos administrativos
+      responses:
+        "200": { description: Agendamentos }
+    post:
+      security: []
+      summary: Cria um agendamento público
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AppointmentInput" }
+      responses:
+        "201": { description: Agendamento criado }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { description: Horário ocupado }
+  /appointments/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ResourceId"
+    put:
+      summary: Atualiza um agendamento
+      responses:
+        "200": { description: Agendamento atualizado }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Horário ocupado }
+    delete:
+      summary: Cancela um agendamento
+      responses:
+        "200": { description: Agendamento cancelado }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /appointments/available-slots:
+    get:
+      security: []
+      summary: Lista horários disponíveis
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: barber
+          in: query
+          schema: { type: string, pattern: "^[a-fA-F0-9]{24}$" }
+      responses:
+        "200": { description: Horários disponíveis }
+        "400": { $ref: "#/components/responses/BadRequest" }
+  /scheduling:
+    get:
+      deprecated: true
+      security: []
+      summary: Lista pública de horários ocupados
+      description: Rota de compatibilidade. Novas mutações devem usar /appointments.
+      responses:
+        "200": { description: Agenda pública sanitizada }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, pattern: "^[a-fA-F0-9]{24}$" }
+  schemas:
+    ServiceInput:
+      type: object
+      required: [name, price, duration]
+      properties:
+        name: { type: string, maxLength: 100 }
+        price: { type: number, minimum: 0 }
+        duration: { type: string, example: "30 min" }
+        active: { type: boolean }
+    AppointmentInput:
+      type: object
+      required: [customerName, customerPhone, serviceName, date, time]
+      properties:
+        customerName: { type: string }
+        customerPhone: { type: string }
+        serviceName: { type: string }
+        date: { type: string, format: date }
+        time: { type: string, example: "09:30" }
+        barber: { type: string, pattern: "^[a-fA-F0-9]{24}$" }
+    Error:
+      type: object
+      required: [success, error]
+      properties:
+        success: { type: boolean, const: false }
+        error: { type: string }
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field: { type: string }
+              message: { type: string }
+  responses:
+    BadRequest:
+      description: Requisição inválida
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Autenticação necessária ou inválida
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

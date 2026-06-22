@@ -4,11 +4,9 @@ import { Appointment } from "../src/models/appointment.model.js";
 import { Barber } from "../src/models/barber.model.js";
 import { Client } from "../src/models/client.model.js";
 import { Service } from "../src/models/service.model.js";
-import { migrateModelFieldsToEnglish } from "../src/services/modelMigration.service.js";
 
 try {
   await connectDatabase();
-  await migrateModelFieldsToEnglish();
   await Promise.all([
     Appointment.syncIndexes(),
     Barber.syncIndexes(),

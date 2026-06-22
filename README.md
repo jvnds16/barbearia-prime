@@ -109,6 +109,9 @@ URLs:
 As rotas administrativas usam o token Bearer retornado por `/api/auth/login`. Isso inclui as rotas
 de escrita e também `GET /api/clients` e `GET /api/appointments`.
 
+O contrato completo da API está documentado em
+[`src/backend/openapi.yaml`](src/backend/openapi.yaml).
+
 ## Build
 
 ```bash
