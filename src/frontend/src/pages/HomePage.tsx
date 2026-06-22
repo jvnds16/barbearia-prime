@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef, ChangeEvent, FocusEvent, FormEvent } from "react";
-import { Scissors, Instagram, Menu, X, Clock, Calendar, RefreshCw, CheckCircle2, AlertCircle, ChevronDown, ChevronLeft, ChevronRight, ShieldCheck } from "lucide-react";
+import { Scissors, Instagram, Menu, X, Clock, Calendar, RefreshCw, CheckCircle2, AlertCircle, ChevronDown, ShieldCheck } from "lucide-react";
 import {
   IconAlarm,
   IconScissors,
   IconAlertSquareRounded,
-  IconCalendarEvent,
   IconBrandMessenger,
   IconPhone,
   IconCurrencyReal,
@@ -16,6 +15,15 @@ import { schedulingService } from "../services/schedulingService";
 import { defaultServices, listServices } from "../services/serviceCatalog";
 import { Agendamento } from "../types/scheduling";
 import { ApiError } from "../services/api";
+import { PublicDatePicker } from "../components/PublicDatePicker";
+import {
+  createAvailableTimes,
+  formatPhone,
+  hasAppointmentConflict,
+  isValidPhone,
+  sanitizePublicAppointments
+} from "../utils/appointment";
+import { formatDisplayDate } from "../utils/date";
 
 type FormField = "nome" | "telefone" | "servico" | "data" | "horario";
 type FormErrors = Partial<Record<FormField, string>>;
@@ -27,229 +35,6 @@ type StatusModal = {
   actionLabel?: string;
 } | null;
 type RefreshResult = "remote" | "local" | "empty";
-
-const sanitizePublicAppointments = (appointments: Agendamento[]): Agendamento[] =>
-  appointments.map(({ data, horario, status, duracaoMinutos }) => ({
-    nome: "",
-    telefone: "",
-    servico: "",
-    data,
-    horario,
-    status,
-    duracaoMinutos
-  }));
-
-const hasAppointmentConflict = (
-  appointments: Agendamento[],
-  date: string,
-  time: string,
-  durationMinutes: number
-) => {
-  const [candidateHour, candidateMinute] = time.split(":").map(Number);
-  const candidateStart = candidateHour * 60 + candidateMinute;
-  const candidateEnd = candidateStart + durationMinutes;
-
-  return appointments.some((appointment) => {
-    if (appointment.status === "cancelado" || appointment.data !== date) return false;
-
-    const [appointmentHour, appointmentMinute] = appointment.horario.split(":").map(Number);
-    const appointmentStart = appointmentHour * 60 + appointmentMinute;
-    const appointmentEnd = appointmentStart + (appointment.duracaoMinutos || 30);
-
-    return candidateStart < appointmentEnd && candidateEnd > appointmentStart;
-  });
-};
-
-type DatePickerProps = {
-  value: string;
-  min: string;
-  max: string;
-  invalid: boolean;
-  describedBy: string;
-  onChange: (value: string) => void;
-};
-
-const parseLocalDate = (value: string) => new Date(`${value}T00:00:00`);
-
-const toDateValue = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
-
-function DatePicker({ value, min, max, invalid, describedBy, onChange }: DatePickerProps) {
-  const [open, setOpen] = useState(false);
-  const [visibleMonth, setVisibleMonth] = useState(() => {
-    const initialDate = value ? parseLocalDate(value) : parseLocalDate(min);
-    return new Date(initialDate.getFullYear(), initialDate.getMonth(), 1);
-  });
-  const containerRef = useRef<HTMLDivElement>(null);
-  const minDate = parseLocalDate(min);
-  const maxDate = parseLocalDate(max);
-  const selectedDate = value ? parseLocalDate(value) : null;
-  const todayValue = toDateValue(new Date());
-
-  useEffect(() => {
-    if (!open) return;
-
-    const closeOnOutsideClick = (event: MouseEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-
-    document.addEventListener("mousedown", closeOnOutsideClick);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("mousedown", closeOnOutsideClick);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (!value) return;
-    const nextDate = parseLocalDate(value);
-    setVisibleMonth(new Date(nextDate.getFullYear(), nextDate.getMonth(), 1));
-  }, [value]);
-
-  const monthStart = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1);
-  const gridStart = new Date(monthStart);
-  gridStart.setDate(1 - monthStart.getDay());
-
-  const days = Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(gridStart);
-    date.setDate(gridStart.getDate() + index);
-    return date;
-  });
-
-  const previousMonth = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1);
-  const nextMonth = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1);
-  const minMonth = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
-  const maxMonth = new Date(maxDate.getFullYear(), maxDate.getMonth(), 1);
-  const canGoPrevious = previousMonth >= minMonth;
-  const canGoNext = nextMonth <= maxMonth;
-  const monthTitle = visibleMonth.toLocaleDateString("pt-BR", {
-    month: "long",
-    year: "numeric"
-  });
-  const formattedMonthTitle = monthTitle.charAt(0).toUpperCase() + monthTitle.slice(1);
-
-  const selectDate = (date: Date) => {
-    onChange(toDateValue(date));
-    setOpen(false);
-  };
-
-  return (
-    <div ref={containerRef} className="relative">
-      <button
-        id="data"
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        className={`group flex w-full items-center justify-between rounded-lg border bg-zinc-950/70 px-4 py-3 text-left outline-none transition focus:ring-2 focus:ring-amber-400/30 ${
-          invalid
-            ? "border-red-400/80 focus:border-red-300"
-            : "border-zinc-700 hover:border-zinc-500 focus:border-amber-400"
-        }`}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-invalid={invalid}
-        aria-describedby={describedBy}
-      >
-        <span className={selectedDate ? "text-white" : "text-zinc-500"}>
-          {selectedDate
-            ? selectedDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })
-            : "Escolha uma data"}
-        </span>
-        <span className="ml-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-amber-400/25 bg-amber-400/10 text-amber-300 transition group-hover:border-amber-400/45 group-focus:border-amber-300/70 group-focus:bg-amber-400/20">
-          <IconCalendarEvent size={19} stroke={1.8} />
-        </span>
-      </button>
-
-      {open && (
-        <div
-          role="dialog"
-          aria-label="Escolher data do agendamento"
-          className="absolute left-0 top-[calc(100%+0.6rem)] z-50 w-full min-w-[19rem] rounded-2xl border border-zinc-700 bg-zinc-950 p-4 shadow-2xl shadow-black/70 sm:w-[22rem]"
-        >
-          <div className="mb-4 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={() => canGoPrevious && setVisibleMonth(previousMonth)}
-              disabled={!canGoPrevious}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-800 text-zinc-300 transition hover:border-amber-400/40 hover:bg-amber-400/10 hover:text-amber-300 disabled:cursor-not-allowed disabled:opacity-25"
-              aria-label="Mês anterior"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-            <strong className="text-sm text-white">
-              {formattedMonthTitle}
-            </strong>
-            <button
-              type="button"
-              onClick={() => canGoNext && setVisibleMonth(nextMonth)}
-              disabled={!canGoNext}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-800 text-zinc-300 transition hover:border-amber-400/40 hover:bg-amber-400/10 hover:text-amber-300 disabled:cursor-not-allowed disabled:opacity-25"
-              aria-label="Próximo mês"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-7 gap-1 text-center">
-            {["D", "S", "T", "Q", "Q", "S", "S"].map((day, index) => (
-              <span key={`${day}-${index}`} className="py-1 text-[0.65rem] font-bold uppercase text-zinc-600">
-                {day}
-              </span>
-            ))}
-            {days.map((date) => {
-              const dateValue = toDateValue(date);
-              const isCurrentMonth = date.getMonth() === visibleMonth.getMonth();
-              const isDisabled = !isCurrentMonth || date < minDate || date > maxDate;
-              const isSelected = dateValue === value;
-              const isToday = dateValue === todayValue;
-
-              return (
-                <button
-                  key={dateValue}
-                  type="button"
-                  onClick={() => selectDate(date)}
-                  disabled={isDisabled}
-                  className={`relative flex aspect-square items-center justify-center rounded-lg text-sm font-medium transition ${
-                    isSelected
-                      ? "bg-amber-400 text-black shadow-md shadow-amber-500/20"
-                      : isDisabled
-                        ? "cursor-not-allowed text-zinc-800"
-                        : "text-zinc-300 hover:bg-amber-400/10 hover:text-amber-300"
-                  }`}
-                  aria-label={date.toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" })}
-                  aria-pressed={isSelected}
-                >
-                  {date.getDate()}
-                  {isToday && !isSelected && (
-                    <span className="absolute bottom-1 h-1 w-1 rounded-full bg-amber-400" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="mt-4 flex items-center justify-between border-t border-zinc-800 pt-3">
-            <span className="text-xs text-zinc-500">Disponível por até 30 dias</span>
-            <button
-              type="button"
-              onClick={() => selectDate(minDate)}
-              className="rounded-lg px-3 py-1.5 text-xs font-bold text-amber-300 transition hover:bg-amber-400/10"
-            >
-              Hoje
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function App() {
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
@@ -448,21 +233,6 @@ function App() {
     return data === `${ano}-${mes}-${dia}`;
   };
 
-  const formatarData = (data: string): string => {
-    const [ano, mes, dia] = data.split("-");
-    return `${dia}/${mes}/${ano}`;
-  };
-
-  const formatarTelefone = (telefone: string): string => {
-    const numeros = telefone.replace(/\D/g, '').slice(0, 11);
-    if (numeros.length <= 2) return numeros;
-    if (numeros.length <= 6) return `(${numeros.slice(0, 2)}) ${numeros.slice(2)}`;
-    if (numeros.length <= 10) {
-      return `(${numeros.slice(0, 2)}) ${numeros.slice(2, 6)}-${numeros.slice(6)}`;
-    }
-    return `(${numeros.slice(0, 2)}) ${numeros.slice(2, 7)}-${numeros.slice(7)}`;
-  };
-
   const getDataAmanha = (): string => {
     const amanha = new Date();
     amanha.setDate(amanha.getDate() + 1);
@@ -472,24 +242,7 @@ function App() {
     return `${ano}-${mes}-${dia}`;
   };
 
-  const validarTelefone = (telefone: string): boolean => {
-    const numeros = telefone.replace(/\D/g, '');
-    return /^[1-9]{2}(?:[2-8]|9[1-9])[0-9]{7,8}$/.test(numeros);
-  };
-
-  const gerarHorariosCompletos = () => {
-    const horarios = [];
-    for (let hora = 8; hora <= 19; hora++) {
-      if (hora === 12) continue;
-      horarios.push(`${hora.toString().padStart(2, "0")}:00`);
-      if (hora !== 19) {
-        horarios.push(`${hora.toString().padStart(2, "0")}:30`);
-      }
-    }
-    return horarios;
-  };
-
-  const horariosDisponiveisBase = gerarHorariosCompletos();
+  const horariosDisponiveisBase = createAvailableTimes();
   const selectedService = servicos.find(s => s.nome === formData.servico);
   const selectedServiceDuration = Number.parseInt(selectedService?.duracao || "30", 10) || 30;
 
@@ -524,7 +277,7 @@ function App() {
 
     if (name === "telefone") {
       if (!cleanedValue) return "Informe um telefone com DDD.";
-      if (!validarTelefone(cleanedValue)) return "Use um telefone válido. Ex.: (27) 91234-5678.";
+      if (!isValidPhone(cleanedValue)) return "Use um telefone válido. Ex.: (27) 91234-5678.";
     }
 
     if (name === "servico" && !cleanedValue) {
@@ -604,7 +357,7 @@ function App() {
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     const fieldName = name as FormField;
-    const nextValue = fieldName === "telefone" ? formatarTelefone(value) : value;
+    const nextValue = fieldName === "telefone" ? formatPhone(value) : value;
 
     setFormData((prev) => ({
       ...prev,
@@ -705,7 +458,7 @@ function App() {
     setLoading(true);
     setSuccessMessage("");
 
-    if (!validarTelefone(formData.telefone)) {
+    if (!isValidPhone(formData.telefone)) {
       setError("⚠️ Por favor, insira um telefone válido com DDD. Ex: (27) 91234-5678");
       setLoading(false);
       return;
@@ -744,7 +497,7 @@ function App() {
 
     if (conflito) {
       const mensagemConflito = encodeURIComponent(
-        `Olá! Vi que o horário ${formData.horario} do dia ${formatarData(formData.data)} está ocupado.` +
+        `Olá! Vi que o horário ${formData.horario} do dia ${formatDisplayDate(formData.data)} está ocupado.` +
         ` Gostaria de verificar outros horários disponíveis para o serviço ${formData.servico}.`
       );
       const numeroBarbearia = "5527981911375";
@@ -785,7 +538,7 @@ function App() {
         `👤 Nome: ${formData.nome}\n` +
         `📞 Telefone: ${formData.telefone}\n` +
         `✂️ Serviço: ${formData.servico}\n` +
-        `📅 Data: ${formatarData(formData.data)}\n` +
+        `📅 Data: ${formatDisplayDate(formData.data)}\n` +
         `⏰ Horário: ${formData.horario}\n` +
         `✅ Confirmação automática via site\n\n` +
         `📲 *Link do Agendamento:* ${window.location.origin}/`
@@ -1018,7 +771,7 @@ function App() {
                 </div>
                 <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-4">
                   <span className="block text-xs uppercase tracking-[0.14em] text-zinc-500">Data e hora</span>
-                  <strong className="mt-1 block text-white">{formData.data ? formatarData(formData.data) : "--"}</strong>
+                  <strong className="mt-1 block text-white">{formData.data ? formatDisplayDate(formData.data) : "--"}</strong>
                   <span className="mt-1 block text-amber-300">{formData.horario}</span>
                 </div>
               </div>
@@ -1311,7 +1064,7 @@ function App() {
 
                   <div className="space-y-2">
                     <label className="block text-sm font-semibold text-zinc-200" htmlFor="data">Data do agendamento</label>
-                    <DatePicker
+                    <PublicDatePicker
                       value={formData.data}
                       min={getDataMinima()}
                       max={getDataMaxima()}
@@ -1323,7 +1076,7 @@ function App() {
                       <p id="data-error" role="alert" className="text-xs font-medium text-red-300">{fieldErrors.data}</p>
                     ) : formData.data ? (
                       <p id="data-hint" className="text-xs text-amber-300">
-                        {formatarData(formData.data)}
+                        {formatDisplayDate(formData.data)}
                         {isHoje(formData.data) && " (Hoje)"}
                         {isAmanha(formData.data) && " (Amanhã)"}
                       </p>
