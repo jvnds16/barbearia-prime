@@ -11,7 +11,7 @@
     "build": "npm run build --prefix frontend",
     "start": "npm run start --prefix backend",
     "db:setup": "npm run db:indexes --prefix backend",
-    "test": "npm run test --prefix backend",
+    "test": "npm run test --prefix backend && npm run test --prefix frontend",
     "typecheck": "npm run typecheck --prefix frontend",
     "lint": "npm run lint --prefix frontend",
     "check": "npm run typecheck && npm run lint && npm run test && npm run build"

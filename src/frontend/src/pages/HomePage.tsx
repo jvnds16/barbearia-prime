@@ -1,15 +1,11 @@
 import { useState, useEffect, useRef, ChangeEvent, FocusEvent, FormEvent } from "react";
-import { Scissors, Instagram, Menu, X, Clock, Calendar, RefreshCw, CheckCircle2, AlertCircle, ChevronDown, ShieldCheck } from "lucide-react";
+import { Calendar, Scissors, X, RefreshCw, CheckCircle2, ChevronDown, ShieldCheck } from "lucide-react";
 import {
   IconAlarm,
-  IconScissors,
   IconAlertSquareRounded,
   IconBrandMessenger,
   IconPhone,
-  IconCurrencyReal,
   IconUserFilled,
-  IconBrandWhatsapp,
-  IconMapPinFilled
 } from '@tabler/icons-react';
 import { schedulingService } from "../services/schedulingService";
 import { defaultServices, listServices } from "../services/serviceCatalog";
@@ -24,6 +20,10 @@ import {
   sanitizePublicAppointments
 } from "../utils/appointment";
 import { formatDisplayDate } from "../utils/date";
+import { SchedulingModals } from "../components/scheduling/SchedulingModals";
+import { usePublicAgenda } from "../hooks/usePublicAgenda";
+import { ContactSection, HomeHero, MobileMenu, ServicesSection } from "../components/home/HomeSections";
+import { AvailabilityPanel } from "../components/scheduling/AvailabilityPanel";
 
 type FormField = "nome" | "telefone" | "servico" | "data" | "horario";
 type FormErrors = Partial<Record<FormField, string>>;
@@ -34,8 +34,6 @@ type StatusModal = {
   actionUrl?: string;
   actionLabel?: string;
 } | null;
-type RefreshResult = "remote" | "local" | "empty";
-
 function App() {
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
@@ -51,14 +49,14 @@ function App() {
     data: "",
     horario: "",
   });
-  const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
-  const [horaAtual, setHoraAtual] = useState<string>("");
-  const [dataAtual, setDataAtual] = useState<string>("");
-  const [showRefreshNotification, setShowRefreshNotification] = useState<boolean>(false);
-  const [refreshingAgenda, setRefreshingAgenda] = useState<boolean>(false);
   const [servicos, setServicos] = useState(defaultServices);
   const schedulingInFlightRef = useRef(false);
-  const agendaRequestSequenceRef = useRef(0);
+  const {
+    agendaRequestSequenceRef, agendamentos, atualizarAgendaManual, dataAtual,
+    fetchAgendamentos, getAgendamentosPorData, getDataAmanha, getDataAtual,
+    getHoraAtual, horaAtual, isAmanha, isHoje, refreshingAgenda,
+    setAgendamentos, setShowRefreshNotification, showRefreshNotification
+  } = usePublicAgenda();
 
   useEffect(() => {
     const carregarServicos = async () => {
@@ -75,14 +73,6 @@ function App() {
     carregarServicos();
   }, []);
 
-  const getDataAtual = (): string => {
-    const agora = new Date();
-    const ano = agora.getFullYear();
-    const mes = (agora.getMonth() + 1).toString().padStart(2, '0');
-    const dia = agora.getDate().toString().padStart(2, '0');
-    return `${ano}-${mes}-${dia}`;
-  };
-
   const getDataMinima = (): string => {
     return getDataAtual();
   };
@@ -93,152 +83,6 @@ function App() {
     const ano = dataMaxima.getFullYear();
     const mes = (dataMaxima.getMonth() + 1).toString().padStart(2, '0');
     const dia = dataMaxima.getDate().toString().padStart(2, '0');
-    return `${ano}-${mes}-${dia}`;
-  };
-
-  const getHoraAtual = (): string => {
-    const agora = new Date();
-    return `${agora.getHours().toString().padStart(2, '0')}:${agora.getMinutes().toString().padStart(2, '0')}`;
-  };
-
-  useEffect(() => {
-    const atualizarTempo = () => {
-      const agora = new Date();
-      const hora = agora.toLocaleTimeString("pt-BR", { hour12: false });
-      const data = agora.toLocaleDateString("pt-BR");
-      setHoraAtual(hora);
-      setDataAtual(data);
-
-      if (hora === "20:00:00") {
-        console.log("🕗 São 20:00 - Forçando refresh dos agendamentos...");
-        fetchAgendamentos(true);
-      }
-    };
-
-    atualizarTempo();
-    const timer = setInterval(atualizarTempo, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const fetchAgendamentos = async (forceRefresh: boolean = false, notifyOnSuccess: boolean = true): Promise<RefreshResult> => {
-    try {
-      const localData = localStorage.getItem('agendamentos');
-      let hasLocalData = false;
-      if (localData && !forceRefresh) {
-        const parsedData = sanitizePublicAppointments(JSON.parse(localData));
-        localStorage.setItem('agendamentos', JSON.stringify(parsedData));
-        setAgendamentos(parsedData);
-        hasLocalData = true;
-        console.log('📂 Agendamentos carregados do localStorage:', parsedData.length);
-      }
-
-      if (forceRefresh) {
-        const requestSequence = ++agendaRequestSequenceRef.current;
-        console.log('🔄 Buscando agendamentos da API...');
-        const result = await schedulingService.list();
-        if (result.success && result.data) {
-          const publicAppointments = sanitizePublicAppointments(result.data);
-          if (requestSequence !== agendaRequestSequenceRef.current) return "remote";
-
-          localStorage.setItem('agendamentos', JSON.stringify(publicAppointments));
-          localStorage.setItem('agendamentosTimestamp', new Date().getTime().toString());
-          setAgendamentos(publicAppointments);
-          if (notifyOnSuccess) {
-            setShowRefreshNotification(true);
-            setTimeout(() => setShowRefreshNotification(false), 5000);
-          }
-          return "remote";
-        }
-
-        return hasLocalData ? "local" : "empty";
-      }
-
-      return hasLocalData ? "local" : "empty";
-    } catch (err) {
-      console.error("Erro ao buscar agendamentos da API, usando localStorage:", err);
-      const localData = localStorage.getItem('agendamentos');
-      if (localData) {
-        setAgendamentos(sanitizePublicAppointments(JSON.parse(localData)));
-        return "local";
-      }
-      return "empty";
-    }
-  };
-
-  const atualizarAgendaManual = async () => {
-    if (refreshingAgenda) return;
-
-    setRefreshingAgenda(true);
-    setError(null);
-
-    try {
-      await Promise.all([
-        fetchAgendamentos(true, false),
-        new Promise((resolve) => window.setTimeout(resolve, 900))
-      ]);
-    } catch (error) {
-      console.error("Erro ao atualizar agenda manualmente:", error);
-    } finally {
-      setRefreshingAgenda(false);
-    }
-  };
-
-  const limparDadosAntigos = () => {
-    const timestamp = localStorage.getItem('agendamentosTimestamp');
-    if (timestamp) {
-      const agora = new Date().getTime();
-      if (agora - Number(timestamp) >= 24 * 60 * 60 * 1000) {
-        localStorage.removeItem('agendamentos');
-        localStorage.removeItem('agendamentosTimestamp');
-      }
-    }
-  };
-
-  useEffect(() => {
-    console.log('Iniciando aplicação...');
-    limparDadosAntigos();
-    fetchAgendamentos(true, false);
-    const cleanupInterval = setInterval(limparDadosAntigos, 60 * 60 * 1000);
-    return () => clearInterval(cleanupInterval);
-  }, []);
-
-  useEffect(() => {
-    const synchronizeAgenda = () => {
-      if (document.visibilityState === "visible") {
-        void fetchAgendamentos(true, false);
-      }
-    };
-
-    const synchronizationInterval = window.setInterval(synchronizeAgenda, 15000);
-    window.addEventListener("focus", synchronizeAgenda);
-    document.addEventListener("visibilitychange", synchronizeAgenda);
-
-    return () => {
-      window.clearInterval(synchronizationInterval);
-      window.removeEventListener("focus", synchronizeAgenda);
-      document.removeEventListener("visibilitychange", synchronizeAgenda);
-    };
-  }, []);
-
-  const isHoje = (data: string): boolean => {
-    return data === getDataAtual();
-  };
-
-  const isAmanha = (data: string): boolean => {
-    const amanha = new Date();
-    amanha.setDate(amanha.getDate() + 1);
-    const ano = amanha.getFullYear();
-    const mes = (amanha.getMonth() + 1).toString().padStart(2, '0');
-    const dia = amanha.getDate().toString().padStart(2, '0');
-    return data === `${ano}-${mes}-${dia}`;
-  };
-
-  const getDataAmanha = (): string => {
-    const amanha = new Date();
-    amanha.setDate(amanha.getDate() + 1);
-    const ano = amanha.getFullYear();
-    const mes = String(amanha.getMonth() + 1).padStart(2, "0");
-    const dia = String(amanha.getDate()).padStart(2, "0");
     return `${ano}-${mes}-${dia}`;
   };
 
@@ -623,23 +467,6 @@ function App() {
   };
 
   useEffect(() => {
-    const verificarEApagarAntigos = () => {
-      const dataHoje = getDataAtual();
-      const agendamentosSalvos = JSON.parse(localStorage.getItem("agendamentos") ?? "[]") as Agendamento[];
-      const agendamentosAtuais = agendamentosSalvos.filter((a) => a.data >= dataHoje);
-
-      if (agendamentosSalvos.length !== agendamentosAtuais.length) {
-        localStorage.setItem("agendamentos", JSON.stringify(agendamentosAtuais));
-        setAgendamentos(agendamentosAtuais);
-      }
-    };
-
-    const interval = setInterval(verificarEApagarAntigos, 60000);
-    verificarEApagarAntigos();
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
     if (menuOpen || reviewModalOpen || statusModal || refreshingAgenda) {
       document.body.style.overflow = 'hidden';
     } else {
@@ -679,10 +506,6 @@ function App() {
 
     return () => window.clearTimeout(closeTimer);
   }, [statusModal]);
-
-  const getAgendamentosPorData = (data: string) => {
-    return agendamentos.filter(a => a.data === data);
-  };
 
   return (
     <div className="min-h-screen bg-black text-white relative overflow-x-hidden">
@@ -739,199 +562,28 @@ function App() {
         </div>
       )}
 
-      {reviewModalOpen && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-lg border border-zinc-700 bg-zinc-950 p-6 shadow-2xl">
-            <div className="mb-5 flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-amber-400">Revisão</p>
-                <h3 className="mt-1 text-2xl font-bold text-white">Confirmar agendamento</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setReviewModalOpen(false)}
-                className="rounded-lg p-2 text-zinc-400 transition hover:bg-zinc-800 hover:text-white"
-                aria-label="Fechar revisão"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="grid gap-3 text-sm text-zinc-200">
-              <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-4">
-                <span className="block text-xs uppercase tracking-[0.14em] text-zinc-500">Cliente</span>
-                <strong className="mt-1 block text-base text-white">{formData.nome}</strong>
-                <span className="mt-1 block text-zinc-400">{formData.telefone}</span>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-4">
-                  <span className="block text-xs uppercase tracking-[0.14em] text-zinc-500">Serviço</span>
-                  <strong className="mt-1 block text-white">{formData.servico}</strong>
-                  <span className="mt-1 block text-amber-300">R$ {selectedService?.preco?.toFixed(2) ?? "0.00"}</span>
-                </div>
-                <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-4">
-                  <span className="block text-xs uppercase tracking-[0.14em] text-zinc-500">Data e hora</span>
-                  <strong className="mt-1 block text-white">{formData.data ? formatDisplayDate(formData.data) : "--"}</strong>
-                  <span className="mt-1 block text-amber-300">{formData.horario}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                onClick={() => setReviewModalOpen(false)}
-                className="rounded-lg border border-zinc-700 px-5 py-3 font-semibold text-zinc-200 transition hover:bg-zinc-800"
-              >
-                Editar dados
-              </button>
-              <button
-                type="button"
-                onClick={confirmarAgendamento}
-                disabled={loading}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-5 py-3 font-bold text-black transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                Confirmar e enviar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {statusModal && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-lg border border-zinc-700 bg-zinc-950 p-6 text-center shadow-2xl">
-            <div className={`mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full ${
-              statusModal.type === "success" ? "bg-green-500/15 text-green-300" : "bg-red-500/15 text-red-300"
-            }`}>
-              {statusModal.type === "success" ? <CheckCircle2 className="h-7 w-7" /> : <AlertCircle className="h-7 w-7" />}
-            </div>
-            <h3 className="text-2xl font-bold text-white">{statusModal.title}</h3>
-            <p className="mt-3 text-sm leading-6 text-zinc-300">{statusModal.message}</p>
-            {statusModal.actionUrl && (
-              <a
-                href={statusModal.actionUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 px-5 py-3 font-bold text-white transition hover:bg-green-500"
-              >
-                <IconBrandWhatsapp size={20} />
-                {statusModal.actionLabel || "Continuar"}
-              </a>
-            )}
-            <button
-              type="button"
-              onClick={() => setStatusModal(null)}
-              className={`${statusModal.actionUrl ? "mt-3" : "mt-6"} w-full rounded-lg bg-amber-500 px-5 py-3 font-bold text-black transition hover:bg-amber-400`}
-            >
-              Entendi
-            </button>
-          </div>
-        </div>
-      )}
+      <SchedulingModals
+        reviewOpen={reviewModalOpen}
+        status={statusModal}
+        appointment={formData}
+        selectedService={selectedService}
+        loading={loading}
+        onCloseReview={() => setReviewModalOpen(false)}
+        onConfirm={confirmarAgendamento}
+        onCloseStatus={() => setStatusModal(null)}
+      />
 
       <div className={`transition-all duration-300 ${menuOpen ? 'blur-sm opacity-80' : 'blur-0 opacity-100'}`}>
-        <header className="relative h-screen" id="home">
-          <div
-            className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-            style={{ backgroundImage: 'url("https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&q=80")' }}
-          >
-            <div className="absolute inset-0 bg-black/60" />
-          </div>
-
-          <nav className="relative z-30 container mx-auto px-6 py-6 flex justify-between items-center">
-            <div className="flex items-center space-x-2">
-              <Scissors className="h-8 w-8 text-amber-500" />
-              <span className="text-1xl font-bold">Prime</span>
-            </div>
-
-            <div className="hidden md:flex items-center space-x-8">
-              <a href="#home" className="hover:text-amber-500 transition">Início</a>
-              <a href="#services" className="hover:text-amber-500 transition">Serviços</a>
-              <a href="#booking" className="hover:text-amber-500 transition">Agendamento</a>
-              <a href="#contact" className="hover:text-amber-500 transition">Contato</a>
-              <a
-                href="/admin"
-                className="flex items-center gap-2 text-amber-500 hover:text-amber-400 transition font-semibold"
-              >
-                <IconUserFilled className="w-4 h-4" />
-                Área do Barbeiro
-              </a>
-            </div>
-
-            <div className="md:hidden flex items-center">
-              <button
-                className="focus:outline-none z-50 relative"
-                onClick={() => setMenuOpen(!menuOpen)}
-              >
-                {menuOpen ? (
-                  <X className="h-8 w-8 text-amber-500" />
-                ) : (
-                  <Menu className="h-8 w-8 text-amber-500" />
-                )}
-              </button>
-            </div>
-          </nav>
-
-          <div className="relative z-10 container mx-auto px-6 h-[calc(100vh-88px)] flex items-center">
-            <div className="max-w-2xl">
-              <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
-                Tradição no corte, atitude no estilo.
-                <br />
-                Bem-vindo à Barbearia Prime!
-              </h1>
-              
-              <div className="flex items-center gap-4 text-white mb-6">
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-amber-400" />
-                  <span className="font-medium">{dataAtual}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Clock className="w-5 h-5 text-amber-400" />
-                  <span className="font-mono">{horaAtual}</span>
-                </div>
-              </div>
-
-              <p className="text-lg md:text-xl mb-8 text-white">
-                Agende seu horário online e transforme seu visual com a gente!
-              </p>
-              <a
-                href="#booking"
-                className="bg-amber-500 text-black px-8 py-4 rounded-md font-semibold hover:bg-amber-600 transition"
-              >
-                Agende seu Horário
-              </a>
-            </div>
-          </div>
-        </header>
-
-        <section id="services" className="py-20 bg-zinc-900 text-center">
-          <h2 className="text-5xl font-bold mb-8">Catálogo de serviços</h2>
-          <p className="text-white mb-12">
-            Escolha o corte que combina com seu estilo.
-          </p>
-
-          <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-8 px-6 max-w-6xl mx-auto">
-            {servicos.map((s, i) => (
-              <div
-                key={i}
-                className="bg-zinc-800 p-6 rounded-lg shadow-lg hover:scale-105 transition cursor-pointer"
-                onClick={() => setFormData({ ...formData, servico: s.nome })}
-              >
-                <h3 className="text-2xl font-bold text-amber-500 mb-3">{s.nome}</h3>
-                <p className="text-white mb-2">
-                  <IconCurrencyReal size={19.5} className="inline-block mr-1" />
-                  {s.preco.toFixed(2)}
-                </p>
-                <p className="text-white flex justify-center items-center gap-2">
-                  <Clock className="w-4 h-4 text-white" />
-                  {s.duracao}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
+        <HomeHero
+          menuOpen={menuOpen}
+          dataAtual={dataAtual}
+          horaAtual={horaAtual}
+          onToggleMenu={() => setMenuOpen(!menuOpen)}
+        />
+        <ServicesSection
+          services={servicos}
+          onSelect={(service) => setFormData({ ...formData, servico: service.nome })}
+        />
 
         <section id="booking" className="py-20 bg-black">
           <div className="container mx-auto px-6">
@@ -1146,147 +798,19 @@ function App() {
                 </form>
               </div>
 
-              <div className="w-full lg:w-96 space-y-6">
-                <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-6 shadow-xl shadow-black/30">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-bold">Horários ocupados — hoje</h3>
-                    <button
-                      type="button"
-                      onClick={atualizarAgendaManual}
-                      disabled={refreshingAgenda}
-                      className="flex items-center gap-1 text-amber-400 hover:text-amber-300 transition text-sm disabled:cursor-not-allowed disabled:opacity-60"
-                      title="Atualizar lista de horários"
-                    >
-                      <RefreshCw className={`h-4 w-4 ${refreshingAgenda ? "animate-spin" : ""}`} />
-                      {refreshingAgenda ? "Atualizando..." : "Atualizar"}
-                    </button>
-                  </div>
-
-                  {getAgendamentosPorData(getDataAtual()).length === 0 ? (
-                    <p className="text-white">Nenhum agendamento para hoje.</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {getAgendamentosPorData(getDataAtual())
-                        .sort((a, b) => a.horario.localeCompare(b.horario))
-                        .map((a, i) => (
-                          <li key={i} className="rounded-lg border border-zinc-800 bg-zinc-950/80 p-3 text-sm">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <span className="font-bold text-amber-400">Horário ocupado</span>
-                                <div className="text-white mt-1">
-                                  <IconScissors className="inline-block mr-1" />
-                                  Indisponível para agendamento
-                                </div>
-                              </div>
-                              <div className="shrink-0 text-right">
-                                <span className="inline-flex items-center gap-1 whitespace-nowrap rounded bg-zinc-800 px-2 py-1 font-mono">
-                                  <IconAlarm className="shrink-0" />
-                                  {a.horario}
-                                </span>
-                              </div>
-                            </div>
-                          </li>
-                        ))
-                      }
-                    </ul>
-                  )}
-                </div>
-
-                <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-6 shadow-xl shadow-black/30">
-                  <h3 className="text-xl font-bold mb-4">Horários ocupados — amanhã</h3>
-
-                  {getAgendamentosPorData(
-                    getDataAmanha()
-                  ).length === 0 ? (
-                    <p className="text-white">Nenhum agendamento para amanhã.</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {getAgendamentosPorData(
-                        getDataAmanha()
-                      )
-                        .sort((a, b) => a.horario.localeCompare(b.horario))
-                        .map((a, i) => (
-                          <li key={i} className="rounded-lg border border-zinc-800 bg-zinc-950/80 p-3 text-sm">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <span className="font-bold text-amber-400">Horário ocupado</span>
-                                <div className="text-white mt-1">
-                                  <IconScissors className="inline-block mr-1" />
-                                  Indisponível para agendamento
-                                </div>
-                              </div>
-                              <div className="shrink-0 text-right">
-                                <span className="inline-flex items-center gap-1 whitespace-nowrap rounded bg-zinc-800 px-2 py-1 font-mono">
-                                  <IconAlarm className="shrink-0" />
-                                  {a.horario}
-                                </span>
-                              </div>
-                            </div>
-                          </li>
-                        ))
-                      }
-                    </ul>
-                  )}
-                </div>
-              </div>
+              <AvailabilityPanel
+                today={getAgendamentosPorData(getDataAtual())}
+                tomorrow={getAgendamentosPorData(getDataAmanha())}
+                refreshing={refreshingAgenda}
+                onRefresh={atualizarAgendaManual}
+              />
             </div>
           </div>
         </section>
 
-        <section id="contact" className="py-20 bg-zinc-900 text-center">
-          <h2 className="text-3xl font-bold mb-4">Entre em contato</h2>
-          <p className="text-white mb-6">
-            <IconMapPinFilled className="inline-block mr-1" /> Av. s/n Serra<br />
-            <IconPhone className="inline-block mr-1" /> (27) 98191-1375
-          </p>
-          <div className="flex justify-center space-x-8">
-            <a href="https://www.instagram.com/imkleitondev/" target="_blank" rel="noreferrer">
-              <Instagram className="h-8 w-8 text-amber-500 hover:text-amber-600 transition" />
-            </a>
-            <a href="https://wa.me/5527981911375" target="_blank" rel="noreferrer">
-              <IconBrandWhatsapp className="h-8 w-8 text-green-500 hover:text-green-600 transition" />
-            </a>
-          </div>
-        </section>
+        <ContactSection />
       </div>
-
-      <div className={`fixed top-0 right-0 h-full w-80 bg-zinc-950 z-50 transform transition-transform duration-300 ease-in-out ${menuOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-        <div className="p-6 h-full flex flex-col">
-          <div className="flex justify-between items-center mb-8">
-            <div className="flex items-center gap-2 text-amber-500">
-              <img src="/logo.png" className="h-8 w-8 bg-amber-500 rounded w-8 h-8" />
-              <span className="text-xl font-bold">Prime</span>
-            </div>
-            <button
-              onClick={() => setMenuOpen(false)}
-              className="p-2 hover:bg-zinc-800 rounded-lg transition"
-            >
-              <X className="h-6 w-6 text-white hover:text-amber-500" />
-            </button>
-          </div>
-
-          <div className="flex flex-col space-y-2 text-lg flex-1">
-            <a href="#home" onClick={() => setMenuOpen(false)} className="hover:text-amber-500 transition py-4 px-4 hover:bg-zinc-800 rounded-lg border-b border-zinc-700">Início</a>
-            <a href="#services" onClick={() => setMenuOpen(false)} className="hover:text-amber-500 transition py-4 px-4 hover:bg-zinc-800 rounded-lg border-b border-zinc-700">Serviços</a>
-            <a href="#booking" onClick={() => setMenuOpen(false)} className="hover:text-amber-500 transition py-4 px-4 hover:bg-zinc-800 rounded-lg border-b border-zinc-700">Agendamento</a>
-            <a href="#contact" onClick={() => setMenuOpen(false)} className="hover:text-amber-500 transition py-4 px-4 hover:bg-zinc-800 rounded-lg border-b border-zinc-700">Contato</a>
-            <a href="/admin" onClick={() => setMenuOpen(false)} className="text-amber-500 hover:text-amber-400 transition py-4 px-4 hover:bg-zinc-800 rounded-lg border-b border-zinc-700 font-semibold">Área do barbeiro</a>
-          </div>
-
-          <div className="mt-auto pt-6">
-            <div className="flex justify-center space-x-6 mb-4">
-              <a href="https://www.instagram.com/imkleitondev/" target="_blank" rel="noreferrer" className="p-3 hover:bg-zinc-800 rounded-lg transition">
-                <Instagram className="h-6 w-6 text-amber-500 hover:text-amber-600" />
-              </a>
-              <a href="https://wa.me/5527981911375" target="_blank" rel="noreferrer" className="p-3 hover:bg-zinc-800 rounded-lg transition">
-                <IconBrandWhatsapp className="h-6 w-6 text-green-500 hover:text-green-600" />
-              </a>
-            </div>
-            <p className="text-center text-white text-sm"><IconMapPinFilled className="inline-block mr-1" /> Av. s/n, Serra</p>
-            <p className="text-center text-white text-sm mt-2"><IconPhone className="inline-block mr-1" /> (27) 98191-1375</p>
-          </div>
-        </div>
-      </div>
+      <MobileMenu open={menuOpen} onClose={() => setMenuOpen(false)} />
     </div>
   );
 }
