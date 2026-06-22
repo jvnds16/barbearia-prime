@@ -1,104 +1,22 @@
 ﻿import mongoose from "mongoose";
 import { Appointment } from "../models/appointment.model.js";
-import { Client } from "../models/client.model.js";
 import { HttpError } from "../utils/httpError.js";
-import { gerarHorariosDisponiveis, hojeISO } from "../utils/timeSlots.js";
 import { resolveServiceDetails } from "../services/serviceCatalog.service.js";
 import { getAvailableSlots } from "../services/availability.service.js";
-import { addDaysToISO, businessMinutesNow } from "../utils/dateTime.js";
 import { appointmentToApi } from "../utils/apiSerializers.js";
-
-const VALID_APPOINTMENT_STATUSES = new Set(["pending", "present", "absent", "cancelled"]);
-const BLOCKING_APPOINTMENT_STATUSES = ["pending", "present", "completed"];
-
-function validarTelefone(telefone) {
-  const numeros = String(telefone || "").replace(/\D/g, "");
-  return /^[1-9]{2}(?:[2-8]|9[1-9])[0-9]{7,8}$/.test(numeros);
-}
-
-function normalizarTexto(value) {
-  return String(value || "").trim().replace(/\s+/g, " ");
-}
-
-function validarNome(nome) {
-  return nome.length >= 3 && nome.length <= 80 && nome.split(" ").length >= 2;
-}
-
-function dataEhValida(data) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return false;
-
-  const [ano, mes, dia] = data.split("-").map(Number);
-  const parsed = new Date(ano, mes - 1, dia);
-
-  return (
-    parsed.getFullYear() === ano &&
-    parsed.getMonth() === mes - 1 &&
-    parsed.getDate() === dia
-  );
-}
-
-function dataMaximaISO() {
-  return addDaysToISO(hojeISO(), 30);
-}
-
-function validarDataAgendamento(data) {
-  return dataEhValida(data) && data >= hojeISO() && data <= dataMaximaISO();
-}
-
-function validarHorario(horario) {
-  return gerarHorariosDisponiveis().includes(horario);
-}
-
-function horarioTemAntecedencia(horario, data) {
-  if (data !== hojeISO()) return true;
-
-  const [hora, minuto] = horario.split(":").map(Number);
-  return hora * 60 + minuto > businessMinutesNow() + 30;
-}
-
-function criarSlotKeys({ data, horario, barbeiro, duracaoMinutos = 30, status = "pending" }) {
-  if (!BLOCKING_APPOINTMENT_STATUSES.includes(status)) return undefined;
-
-  const [hour, minute] = horario.split(":").map(Number);
-  const start = hour * 60 + minute;
-  const slots = Math.ceil(duracaoMinutos / 30);
-
-  return Array.from({ length: slots }, (_, index) => {
-    const slotMinutes = start + index * 30;
-    const slotHour = String(Math.floor(slotMinutes / 60)).padStart(2, "0");
-    const slotMinute = String(slotMinutes % 60).padStart(2, "0");
-    return `${data}|${slotHour}:${slotMinute}|${barbeiro || "principal"}`;
-  });
-}
-
-async function ensureNoConflict({ data, horario, barbeiro, duracaoMinutos = 30, ignoreId }) {
-  const requestedSlots = criarSlotKeys({ data, horario, barbeiro, duracaoMinutos });
-  const query = {
-    date: data,
-    status: { $in: BLOCKING_APPOINTMENT_STATUSES }
-  };
-
-  if (barbeiro) query.barber = barbeiro;
-  if (ignoreId) query._id = { $ne: ignoreId };
-
-  const appointments = await Appointment.find(query)
-    .select("time durationMinutes")
-    .lean();
-  const requested = new Set(requestedSlots);
-  const exists = appointments.some((appointment) => {
-    const occupiedSlots = criarSlotKeys({
-      data,
-      horario: appointment.time,
-      barbeiro,
-      duracaoMinutos: appointment.durationMinutes || 30
-    });
-    return occupiedSlots.some((slot) => requested.has(slot));
-  });
-
-  if (exists) {
-    throw new HttpError(409, "This time slot is already booked.");
-  }
-}
+import {
+  BLOCKING_APPOINTMENT_STATUSES,
+  VALID_APPOINTMENT_STATUSES,
+  createSlotKeys,
+  ensureNoAppointmentConflict,
+  hasRequiredLeadTime,
+  isValidAppointmentDate,
+  isValidAppointmentTime,
+  isValidCustomerName,
+  isValidPhone,
+  normalizeText,
+  syncAppointmentClient
+} from "../services/appointment.service.js";
 
 export async function listAppointments(req, res) {
   const query = {};
@@ -129,13 +47,13 @@ export async function listPublicSchedule(req, res) {
 }
 
 export async function createAppointment(req, res) {
-  const nome = normalizarTexto(req.body.customerName);
-  const telefone = normalizarTexto(req.body.customerPhone);
-  const servico = normalizarTexto(req.body.serviceName);
-  const data = normalizarTexto(req.body.date);
-  const horario = normalizarTexto(req.body.time);
+  const nome = normalizeText(req.body.customerName);
+  const telefone = normalizeText(req.body.customerPhone);
+  const servico = normalizeText(req.body.serviceName);
+  const data = normalizeText(req.body.date);
+  const horario = normalizeText(req.body.time);
   const barbeiro = req.body.barber;
-  const idempotencyKey = normalizarTexto(req.get("Idempotency-Key") || req.body.idempotencyKey);
+  const idempotencyKey = normalizeText(req.get("Idempotency-Key") || req.body.idempotencyKey);
 
   if (idempotencyKey && !/^[A-Za-z0-9_-]{8,100}$/.test(idempotencyKey)) {
     throw new HttpError(400, "Invalid idempotency key.");
@@ -156,11 +74,11 @@ export async function createAppointment(req, res) {
     throw new HttpError(400, "Fill in all required fields.");
   }
 
-  if (!validarNome(nome)) {
+  if (!isValidCustomerName(nome)) {
     throw new HttpError(400, "Enter first and last name, up to 80 characters.");
   }
 
-  if (!validarTelefone(telefone)) {
+  if (!isValidPhone(telefone)) {
     throw new HttpError(400, "Invalid phone. Include the area code.");
   }
 
@@ -168,15 +86,15 @@ export async function createAppointment(req, res) {
     throw new HttpError(400, "Invalid barber.");
   }
 
-  if (!validarDataAgendamento(data)) {
+  if (!isValidAppointmentDate(data)) {
     throw new HttpError(400, "Choose a valid date between today and the next 30 days.");
   }
 
-  if (!validarHorario(horario)) {
+  if (!isValidAppointmentTime(horario)) {
     throw new HttpError(400, "Time is outside business hours.");
   }
 
-  if (!horarioTemAntecedencia(horario, data)) {
+  if (!hasRequiredLeadTime(horario, data)) {
     throw new HttpError(400, "Choose a time at least 30 minutes in advance.");
   }
 
@@ -184,7 +102,7 @@ export async function createAppointment(req, res) {
   if (!service) {
     throw new HttpError(400, "Invalid or unavailable service.");
   }
-  await ensureNoConflict({
+  await ensureNoAppointmentConflict({
     data,
     horario,
     barbeiro,
@@ -203,7 +121,7 @@ export async function createAppointment(req, res) {
       time: horario,
       barber: barbeiro,
       status: "pending",
-      slotKeys: criarSlotKeys({
+      slotKeys: createSlotKeys({
         data,
         horario,
         barbeiro,
@@ -226,19 +144,7 @@ export async function createAppointment(req, res) {
     throw error;
   }
 
-  try {
-    await Client.findOneAndUpdate(
-      { phone: telefone },
-      { name: nome, phone: telefone },
-      { upsert: true, new: true, runValidators: true }
-    );
-  } catch (error) {
-    if (error?.code === 11000) {
-      await Client.updateOne({ phone: telefone }, { name: nome });
-    } else {
-      console.error("Could not synchronize the client record:", error);
-    }
-  }
+  await syncAppointmentClient({ name: nome, phone: telefone });
 
   res.status(201).json({
     success: true,
@@ -273,24 +179,24 @@ export async function updateAppointment(req, res) {
   }
 
   if (updateData.customerPhone) {
-    updateData.customerPhone = normalizarTexto(updateData.customerPhone);
-    if (!validarTelefone(updateData.customerPhone)) {
+    updateData.customerPhone = normalizeText(updateData.customerPhone);
+    if (!isValidPhone(updateData.customerPhone)) {
       throw new HttpError(400, "Invalid phone. Include the area code.");
     }
   }
 
   if (updateData.customerName) {
-    updateData.customerName = normalizarTexto(updateData.customerName);
-    if (!validarNome(updateData.customerName)) {
+    updateData.customerName = normalizeText(updateData.customerName);
+    if (!isValidCustomerName(updateData.customerName)) {
       throw new HttpError(400, "Enter first and last name, up to 80 characters.");
     }
   }
 
-  if (updateData.date && updateData.date !== current.date && !validarDataAgendamento(updateData.date)) {
+  if (updateData.date && updateData.date !== current.date && !isValidAppointmentDate(updateData.date)) {
     throw new HttpError(400, "Choose a valid date between today and the next 30 days.");
   }
 
-  if (updateData.time && updateData.time !== current.time && !validarHorario(updateData.time)) {
+  if (updateData.time && updateData.time !== current.time && !isValidAppointmentTime(updateData.time)) {
     throw new HttpError(400, "Time is outside business hours.");
   }
 
@@ -308,14 +214,14 @@ export async function updateAppointment(req, res) {
     String(updateData.barber || "") !== String(current.barber || "");
   const serviceChanged =
     updateData.serviceName !== undefined &&
-    normalizarTexto(updateData.serviceName) !== current.serviceName;
+    normalizeText(updateData.serviceName) !== current.serviceName;
 
-  if (scheduleChanged && !horarioTemAntecedencia(horario, data)) {
+  if (scheduleChanged && !hasRequiredLeadTime(horario, data)) {
     throw new HttpError(400, "Choose a time at least 30 minutes in advance.");
   }
 
   if (updateData.serviceName !== undefined) {
-    updateData.serviceName = normalizarTexto(updateData.serviceName);
+    updateData.serviceName = normalizeText(updateData.serviceName);
   }
 
   if (serviceChanged) {
@@ -333,10 +239,10 @@ export async function updateAppointment(req, res) {
     BLOCKING_APPOINTMENT_STATUSES.includes(status) &&
     (scheduleChanged || barberChanged || serviceChanged || reactivatingSlot)
   ) {
-    await ensureNoConflict({ data, horario, barbeiro, duracaoMinutos, ignoreId: id });
+    await ensureNoAppointmentConflict({ data, horario, barbeiro, duracaoMinutos, ignoreId: id });
   }
 
-  const slotKeys = criarSlotKeys({ data, horario, barbeiro, duracaoMinutos, status });
+  const slotKeys = createSlotKeys({ data, horario, barbeiro, duracaoMinutos, status });
   let updateOperation;
 
   if (status === "cancelled") {

@@ -1,0 +1,63 @@
+import { Agendamento } from "../types/scheduling";
+
+export const sanitizePublicAppointments = (appointments: Agendamento[]): Agendamento[] =>
+  appointments.map(({ data, horario, status, duracaoMinutos }) => ({
+    nome: "",
+    telefone: "",
+    servico: "",
+    data,
+    horario,
+    status,
+    duracaoMinutos
+  }));
+
+export function hasAppointmentConflict(
+  appointments: Agendamento[],
+  date: string,
+  time: string,
+  durationMinutes: number
+) {
+  const [candidateHour, candidateMinute] = time.split(":").map(Number);
+  const candidateStart = candidateHour * 60 + candidateMinute;
+  const candidateEnd = candidateStart + durationMinutes;
+
+  return appointments.some((appointment) => {
+    if (appointment.status === "cancelado" || appointment.data !== date) return false;
+
+    const [appointmentHour, appointmentMinute] = appointment.horario.split(":").map(Number);
+    const appointmentStart = appointmentHour * 60 + appointmentMinute;
+    const appointmentEnd = appointmentStart + (appointment.duracaoMinutos || 30);
+
+    return candidateStart < appointmentEnd && candidateEnd > appointmentStart;
+  });
+}
+
+export function formatPhone(phone: string) {
+  const digits = phone.replace(/\D/g, "").slice(0, 11);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
+export function isValidPhone(phone: string) {
+  const digits = phone.replace(/\D/g, "");
+  return /^[1-9]{2}(?:[2-8]|9[1-9])[0-9]{7,8}$/.test(digits);
+}
+
+export function createAvailableTimes() {
+  const times = [];
+
+  for (let hour = 8; hour <= 19; hour += 1) {
+    if (hour === 12) continue;
+
+    times.push(`${String(hour).padStart(2, "0")}:00`);
+    if (hour !== 19) {
+      times.push(`${String(hour).padStart(2, "0")}:30`);
+    }
+  }
+
+  return times;
+}

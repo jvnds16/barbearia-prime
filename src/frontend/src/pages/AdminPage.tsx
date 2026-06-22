@@ -7,6 +7,8 @@ import { defaultServices, listServices } from '../services/serviceCatalog';
 import { Agendamento, DashboardStats, Servico } from '../types/scheduling';
 import { ModernDatePicker } from '../components/ModernDatePicker';
 import { ApiError } from '../services/api';
+import { calculateDashboardStats } from '../utils/dashboard';
+import { formatDisplayDate, toDateValue } from '../utils/date';
 
 type AdminMessage = {
   type: 'success' | 'error';
@@ -14,9 +16,6 @@ type AdminMessage = {
 } | null;
 
 type EditErrors = Partial<Record<'nome' | 'telefone' | 'servico' | 'preco' | 'data' | 'horario', string>>;
-
-const formatDateValue = (date: Date) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
 const appointmentStatusClasses: Record<NonNullable<Agendamento['status']>, string> = {
   pendente: 'bg-yellow-500/20 text-yellow-500',
@@ -40,7 +39,7 @@ function Admin() {
   const [showPassword, setShowPassword] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Agendamento | null>(null);
-  const [filterDate, setFilterDate] = useState(() => formatDateValue(new Date()));
+  const [filterDate, setFilterDate] = useState(() => toDateValue(new Date()));
   const [clearingFilter, setClearingFilter] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<AdminMessage>(null);
@@ -64,7 +63,7 @@ function Admin() {
     servicosMaisPopulares: []
   });
   const hoje = new Date();
-  const dataHoje = formatDateValue(hoje);
+  const dataHoje = toDateValue(hoje);
   const limiteEdicao = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + 30);
   const dataLimiteEdicao = `${limiteEdicao.getFullYear()}-${String(limiteEdicao.getMonth() + 1).padStart(2, '0')}-${String(limiteEdicao.getDate()).padStart(2, '0')}`;
   const horariosPermitidos = Array.from({ length: 23 }, (_, index) => {
@@ -111,72 +110,7 @@ function Admin() {
     return () => {
       window.clearInterval(interval);
     };
-  // A atualização periódica é recriada apenas quando o estado de autenticação muda.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]);
-
-  const calcularEstatisticas = (agendamentos: Agendamento[]) => {
-    const agora = new Date();
-    const hoje = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}-${String(agora.getDate()).padStart(2, '0')}`;
-    const mesAtual = hoje.substring(0, 7);
-    const agendamentosValidos = agendamentos.filter(a => a.status !== 'cancelado');
-    const agendamentosPresentes = agendamentos.filter(a => a.status === 'presente');
-
-    const agendamentosHoje = agendamentosValidos.filter(a => a.data === hoje);
-    const agendamentosMes = agendamentosValidos.filter(a => a.data.startsWith(mesAtual));
-    const presentesHoje = agendamentosPresentes.filter(a => a.data === hoje);
-    const presentesMes = agendamentosPresentes.filter(a => a.data.startsWith(mesAtual));
-    const pendentesMes = agendamentosMes.filter(a => a.status === 'pendente').length;
-    const ausentesMes = agendamentosMes.filter(a => a.status === 'ausente').length;
-
-    const lucroHoje = presentesHoje.reduce((total, a) => total + (a.preco || 0), 0);
-    const lucroMensal = presentesMes.reduce((total, a) => total + (a.preco || 0), 0);
-
-    // Agrupar lucros por dia
-    const lucrosPorDia = presentesMes.reduce((acc, a) => {
-      const dia = a.data;
-      acc[dia] = (acc[dia] || 0) + (a.preco || 0);
-      return acc;
-    }, {} as Record<string, number>);
-
-    // Serviços mais populares
-    const servicosAgrupados = presentesMes.reduce((acc, a) => {
-      const servico = a.servico;
-      if (!acc[servico]) {
-        acc[servico] = { quantidade: 0, lucroTotal: 0 };
-      }
-      acc[servico].quantidade++;
-      acc[servico].lucroTotal += a.preco || 0;
-      return acc;
-    }, {} as Record<string, { quantidade: number; lucroTotal: number }>);
-
-    const servicosMaisPopulares = Object.entries(servicosAgrupados)
-      .map(([servico, stats]) => ({
-        servico,
-        quantidade: stats.quantidade,
-        lucroTotal: stats.lucroTotal
-      }))
-      .sort((a, b) => b.quantidade - a.quantidade)
-      .slice(0, 5);
-
-    const diasComAgendamento = Object.keys(lucrosPorDia).length;
-    const mediaDiaria = diasComAgendamento > 0 ? lucroMensal / diasComAgendamento : 0;
-
-    setDashboardStats({
-      lucroHoje,
-      lucroMensal,
-      totalAgendamentos: agendamentosValidos.length,
-      mediaDiaria,
-      agendamentosHoje: agendamentosHoje.length,
-      agendamentosMes: agendamentosMes.length,
-      atendimentosHoje: presentesHoje.length,
-      atendimentosMes: presentesMes.length,
-      pendentesMes,
-      ausentesMes,
-      lucrosPorDia,
-      servicosMaisPopulares
-    });
-  };
 
   const loadAgendamentos = async (silent = false) => {
     if (loadingAppointmentsRef.current) return;
@@ -188,7 +122,7 @@ function Admin() {
       const { data, success } = await schedulingService.listAdmin();
       if (success) {
         setAgendamentos(data);
-        calcularEstatisticas(data);
+        setDashboardStats(calculateDashboardStats(data));
         setMessage((current) =>
           current?.text === 'Não foi possível atualizar os dados do painel.' ? null : current
         );
@@ -310,7 +244,7 @@ function Admin() {
           a._id === editingId ? { ...result.data } : a
         );
         setAgendamentos(updatedAgendamentos);
-        calcularEstatisticas(updatedAgendamentos);
+        setDashboardStats(calculateDashboardStats(updatedAgendamentos));
 
         setEditingId(null);
         setEditForm(null);
@@ -340,7 +274,7 @@ function Admin() {
           a._id === id ? result.data : a
         );
         setAgendamentos(updatedAgendamentos);
-        calcularEstatisticas(updatedAgendamentos);
+        setDashboardStats(calculateDashboardStats(updatedAgendamentos));
 
         setDeleteTarget(null);
         setMessage({ type: 'success', text: 'Agendamento cancelado com sucesso.' });
@@ -375,11 +309,6 @@ function Admin() {
       delete next[field as keyof EditErrors];
       return next;
     });
-  };
-
-  const formatarData = (data: string) => {
-    const [ano, mes, dia] = data.split('-');
-    return `${dia}/${mes}/${ano}`;
   };
 
   const formatarMoeda = (valor: number) => {
@@ -767,7 +696,7 @@ function Admin() {
                     return (
                       <div key={dia} className="space-y-2">
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-white">{formatarData(dia)}</span>
+                          <span className="text-sm text-white">{formatDisplayDate(dia)}</span>
                           <span className="text-sm font-bold text-green-500">{formatarMoeda(lucro)}</span>
                         </div>
                         <div className="w-full bg-zinc-800 rounded-full h-3 overflow-hidden">
@@ -852,7 +781,7 @@ function Admin() {
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-white">
                           <div className="flex shrink-0 items-center gap-1.5">
                             <Calendar className="h-4 w-4 shrink-0" />
-                            {formatarData(agendamento.data)}
+                            {formatDisplayDate(agendamento.data)}
                           </div>
                           <div className="flex shrink-0 items-center gap-1.5">
                             <Clock className="h-4 w-4 shrink-0" />
@@ -945,7 +874,7 @@ function Admin() {
           <div className="bg-zinc-900 rounded-lg overflow-hidden">
             <div className="px-6 py-4 border-b border-zinc-700">
               <h2 className="text-xl font-bold">
-                Agendamentos {filterDate && `- ${formatarData(filterDate)}`}
+                Agendamentos {filterDate && `- ${formatDisplayDate(filterDate)}`}
               </h2>
             </div>
 
@@ -1124,7 +1053,7 @@ function Admin() {
                                 <div className="flex items-center gap-2">
                                   <Clock className="h-4 w-4 shrink-0" />
                                   <span className="whitespace-nowrap">
-                                    {formatarData(agendamento.data)} às {agendamento.horario}
+                                    {formatDisplayDate(agendamento.data)} às {agendamento.horario}
                                   </span>
                                 </div>
                                 <div className={`px-2 py-1 rounded-full text-xs font-medium ${appointmentStatusClasses[agendamento.status || 'pendente']}`}>
