@@ -103,8 +103,8 @@ URLs:
 - `POST /api/appointments`
 - `PUT /api/appointments/:id`
 - `DELETE /api/appointments/:id`
+- `GET /api/appointments/public`
 - `GET /api/appointments/available-slots?date=YYYY-MM-DD`
-- `GET /api/scheduling`
 
 As rotas administrativas usam o token Bearer retornado por `/api/auth/login`. Isso inclui as rotas
 de escrita e também `GET /api/clients` e `GET /api/appointments`.

@@ -1,24 +1,25 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { schedulingService } from "./schedulingService";
+import { appointmentService } from "./appointmentService";
 
 const okResponse = {
   ok: true,
   status: 200,
-  text: async () => JSON.stringify({
-    success: true,
-    data: {
-      _id: "appointment-id",
-      customerName: "João Silva",
-      customerPhone: "27999999999",
-      serviceName: "Corte",
-      date: "2026-06-22",
-      time: "09:00",
-      status: "pending"
-    }
-  })
+  text: async () =>
+    JSON.stringify({
+      success: true,
+      data: {
+        _id: "appointment-id",
+        customerName: "João Silva",
+        customerPhone: "27999999999",
+        serviceName: "Corte",
+        date: "2026-06-22",
+        time: "09:00",
+        status: "pending",
+      },
+    }),
 };
 
-describe("scheduling service routes", () => {
+describe("appointment service routes", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -27,17 +28,17 @@ describe("scheduling service routes", () => {
     const fetchMock = vi.fn().mockResolvedValue(okResponse);
     vi.stubGlobal("fetch", fetchMock);
 
-    await schedulingService.create({
-      nome: "João Silva",
-      telefone: "27999999999",
-      servico: "Corte",
-      data: "2026-06-22",
-      horario: "09:00"
+    await appointmentService.create({
+      customerName: "João Silva",
+      customerPhone: "27999999999",
+      serviceName: "Corte",
+      date: "2026-06-22",
+      time: "09:00",
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/appointments",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({ method: "POST" }),
     );
   });
 
@@ -47,21 +48,21 @@ describe("scheduling service routes", () => {
     vi.stubGlobal("sessionStorage", {
       getItem: () => "token",
       setItem: () => undefined,
-      removeItem: () => undefined
+      removeItem: () => undefined,
     });
 
-    await schedulingService.update("appointment-id", { status: "presente" });
-    await schedulingService.remove("appointment-id");
+    await appointmentService.update("appointment-id", { status: "present" });
+    await appointmentService.remove("appointment-id");
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       "/api/appointments/appointment-id",
-      expect.objectContaining({ method: "PUT" })
+      expect.objectContaining({ method: "PUT" }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "/api/appointments/appointment-id",
-      expect.objectContaining({ method: "DELETE" })
+      expect.objectContaining({ method: "DELETE" }),
     );
   });
 });

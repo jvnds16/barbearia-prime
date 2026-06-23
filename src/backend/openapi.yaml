@@ -173,14 +173,12 @@ paths:
       responses:
         "200": { description: Horários disponíveis }
         "400": { $ref: "#/components/responses/BadRequest" }
-  /scheduling:
+  /appointments/public:
     get:
-      deprecated: true
       security: []
-      summary: Lista pública de horários ocupados
-      description: Rota de compatibilidade. Novas mutações devem usar /appointments.
+      summary: Lista publica de horarios ocupados
       responses:
-        "200": { description: Agenda pública sanitizada }
+        "200": { description: Agenda publica sanitizada }
 components:
   securitySchemes:
     bearerAuth:

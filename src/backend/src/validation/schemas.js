@@ -85,7 +85,7 @@ export const availabilityQuerySchema = z.object({
   barber: z.string().regex(/^[a-f\d]{24}$/i, "Invalid barber.").optional()
 });
 
-export const publicScheduleQuerySchema = z.object({
+export const publicAppointmentQuerySchema = z.object({
   date: z.string().optional()
 });
 

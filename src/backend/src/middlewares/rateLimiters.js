@@ -15,7 +15,7 @@ export const loginLimiter = rateLimit({
   }
 });
 
-export const schedulingLimiter = rateLimit({
+export const appointmentLimiter = rateLimit({
   ...commonOptions,
   windowMs: 10 * 60 * 1000,
   limit: 12,

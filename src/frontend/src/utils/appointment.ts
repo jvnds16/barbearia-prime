@@ -1,32 +1,38 @@
-import { Agendamento } from "../types/scheduling";
+import { Appointment } from "../types/appointment";
 
-export const sanitizePublicAppointments = (appointments: Agendamento[]): Agendamento[] =>
-  appointments.map(({ data, horario, status, duracaoMinutos }) => ({
-    nome: "",
-    telefone: "",
-    servico: "",
-    data,
-    horario,
+export const sanitizePublicAppointments = (
+  appointments: Appointment[],
+): Appointment[] =>
+  appointments.map(({ date, time, status, durationMinutes }) => ({
+    customerName: "",
+    customerPhone: "",
+    serviceName: "",
+    date,
+    time,
     status,
-    duracaoMinutos
+    durationMinutes,
   }));
 
 export function hasAppointmentConflict(
-  appointments: Agendamento[],
+  appointments: Appointment[],
   date: string,
   time: string,
-  durationMinutes: number
+  durationMinutes: number,
 ) {
   const [candidateHour, candidateMinute] = time.split(":").map(Number);
   const candidateStart = candidateHour * 60 + candidateMinute;
   const candidateEnd = candidateStart + durationMinutes;
 
   return appointments.some((appointment) => {
-    if (appointment.status === "cancelado" || appointment.data !== date) return false;
+    if (appointment.status === "cancelled" || appointment.date !== date)
+      return false;
 
-    const [appointmentHour, appointmentMinute] = appointment.horario.split(":").map(Number);
+    const [appointmentHour, appointmentMinute] = appointment.time
+      .split(":")
+      .map(Number);
     const appointmentStart = appointmentHour * 60 + appointmentMinute;
-    const appointmentEnd = appointmentStart + (appointment.duracaoMinutos || 30);
+    const appointmentEnd =
+      appointmentStart + (appointment.durationMinutes || 30);
 
     return candidateStart < appointmentEnd && candidateEnd > appointmentStart;
   });

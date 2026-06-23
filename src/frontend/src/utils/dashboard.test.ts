@@ -8,28 +8,28 @@ describe("dashboard statistics", () => {
 
     const stats = calculateDashboardStats([
       {
-        nome: "João Silva",
-        telefone: "27999999999",
-        servico: "Corte",
-        preco: 30,
-        data: "2026-06-22",
-        horario: "09:00",
-        status: "presente"
+        customerName: "João Silva",
+        customerPhone: "27999999999",
+        serviceName: "Corte",
+        price: 30,
+        date: "2026-06-22",
+        time: "09:00",
+        status: "present",
       },
       {
-        nome: "Maria Silva",
-        telefone: "27988888888",
-        servico: "Barba",
-        preco: 25,
-        data: "2026-06-22",
-        horario: "10:00",
-        status: "pendente"
-      }
+        customerName: "Maria Silva",
+        customerPhone: "27988888888",
+        serviceName: "Barba",
+        price: 25,
+        date: "2026-06-22",
+        time: "10:00",
+        status: "pending",
+      },
     ]);
 
-    expect(stats.lucroHoje).toBe(30);
-    expect(stats.agendamentosHoje).toBe(2);
-    expect(stats.atendimentosHoje).toBe(1);
+    expect(stats.todayProfit).toBe(30);
+    expect(stats.todayAppointments).toBe(2);
+    expect(stats.todayAttendances).toBe(1);
     vi.useRealTimers();
   });
 });

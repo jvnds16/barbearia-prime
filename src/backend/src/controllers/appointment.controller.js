@@ -1,4 +1,4 @@
-﻿import mongoose from "mongoose";
+import mongoose from "mongoose";
 import { Appointment } from "../models/appointment.model.js";
 import { HttpError } from "../utils/httpError.js";
 import { resolveServiceDetails } from "../services/serviceCatalog.service.js";
@@ -33,7 +33,7 @@ export async function listAppointments(req, res) {
   return sendData(res, appointments.map(appointmentToApi));
 }
 
-export async function listPublicSchedule(req, res) {
+export async function listPublicAppointments(req, res) {
   const query = {};
 
   if (req.query.date) query.date = req.query.date;
@@ -208,7 +208,7 @@ export async function updateAppointment(req, res) {
   const status = updateData.status || current.status;
   let duracaoMinutos = current.durationMinutes || 30;
 
-  const scheduleChanged =
+  const appointmentTimeChanged =
     (updateData.date !== undefined && updateData.date !== current.date) ||
     (updateData.time !== undefined && updateData.time !== current.time);
   const barberChanged =
@@ -218,7 +218,7 @@ export async function updateAppointment(req, res) {
     updateData.serviceName !== undefined &&
     normalizeText(updateData.serviceName) !== current.serviceName;
 
-  if (scheduleChanged && !hasRequiredLeadTime(horario, data)) {
+  if (appointmentTimeChanged && !hasRequiredLeadTime(horario, data)) {
     throw new HttpError(400, "Choose a time at least 30 minutes in advance.");
   }
 
@@ -239,7 +239,7 @@ export async function updateAppointment(req, res) {
   const reactivatingSlot = ["cancelled", "absent"].includes(current.status);
   if (
     BLOCKING_APPOINTMENT_STATUSES.includes(status) &&
-    (scheduleChanged || barberChanged || serviceChanged || reactivatingSlot)
+    (appointmentTimeChanged || barberChanged || serviceChanged || reactivatingSlot)
   ) {
     await ensureNoAppointmentConflict({ data, horario, barbeiro, duracaoMinutos, ignoreId: id });
   }

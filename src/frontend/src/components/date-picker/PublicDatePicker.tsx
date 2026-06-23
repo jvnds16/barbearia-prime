@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { IconCalendarEvent } from "@tabler/icons-react";
-import { toDateValue } from "../utils/date";
-import { useDatePicker } from "../hooks/useDatePicker";
+import { toDateValue } from "../../utils/date";
+import { useDatePicker } from "../../hooks/useDatePicker";
 
 type PublicDatePickerProps = {
   value: string;
@@ -18,12 +18,25 @@ export function PublicDatePicker({
   max,
   invalid,
   describedBy,
-  onChange
+  onChange,
 }: PublicDatePickerProps) {
   const {
-    canGoNext, canGoPrevious, containerRef, days, maxDate, minDate, nextMonth,
-    open, previousMonth, selectedDate, selectDate, setOpen, setVisibleMonth,
-    todayValue, visibleMonth, formattedMonthTitle
+    canGoNext,
+    canGoPrevious,
+    containerRef,
+    days,
+    maxDate,
+    minDate,
+    nextMonth,
+    open,
+    previousMonth,
+    selectedDate,
+    selectDate,
+    setOpen,
+    setVisibleMonth,
+    todayValue,
+    visibleMonth,
+    formattedMonthTitle,
   } = useDatePicker({ value, min, max, onChange });
 
   return (
@@ -44,7 +57,11 @@ export function PublicDatePicker({
       >
         <span className={selectedDate ? "text-white" : "text-zinc-500"}>
           {selectedDate
-            ? selectedDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })
+            ? selectedDate.toLocaleDateString("pt-BR", {
+                day: "2-digit",
+                month: "long",
+                year: "numeric",
+              })
             : "Escolha uma data"}
         </span>
         <span className="ml-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-amber-400/25 bg-amber-400/10 text-amber-300 transition group-hover:border-amber-400/45 group-focus:border-amber-300/70 group-focus:bg-amber-400/20">
@@ -84,14 +101,19 @@ export function PublicDatePicker({
 
           <div className="grid grid-cols-7 gap-1 text-center">
             {["D", "S", "T", "Q", "Q", "S", "S"].map((day, index) => (
-              <span key={`${day}-${index}`} className="py-1 text-[0.65rem] font-bold uppercase text-zinc-600">
+              <span
+                key={`${day}-${index}`}
+                className="py-1 text-[0.65rem] font-bold uppercase text-zinc-600"
+              >
                 {day}
               </span>
             ))}
             {days.map((date) => {
               const dateValue = toDateValue(date);
-              const isCurrentMonth = date.getMonth() === visibleMonth.getMonth();
-              const isDisabled = !isCurrentMonth || date < minDate || date > maxDate;
+              const isCurrentMonth =
+                date.getMonth() === visibleMonth.getMonth();
+              const isDisabled =
+                !isCurrentMonth || date < minDate || date > maxDate;
               const isSelected = dateValue === value;
               const isToday = dateValue === todayValue;
 
@@ -108,7 +130,11 @@ export function PublicDatePicker({
                         ? "cursor-not-allowed text-zinc-800"
                         : "text-zinc-300 hover:bg-amber-400/10 hover:text-amber-300"
                   }`}
-                  aria-label={date.toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" })}
+                  aria-label={date.toLocaleDateString("pt-BR", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
                   aria-pressed={isSelected}
                 >
                   {date.getDate()}
@@ -121,7 +147,9 @@ export function PublicDatePicker({
           </div>
 
           <div className="mt-4 flex items-center justify-between border-t border-zinc-800 pt-3">
-            <span className="text-xs text-zinc-500">Disponível por até 30 dias</span>
+            <span className="text-xs text-zinc-500">
+              Disponível por até 30 dias
+            </span>
             <button
               type="button"
               onClick={() => selectDate(minDate)}

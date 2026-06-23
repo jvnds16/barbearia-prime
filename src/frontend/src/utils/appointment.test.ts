@@ -4,7 +4,7 @@ import {
   formatPhone,
   hasAppointmentConflict,
   isValidPhone,
-  sanitizePublicAppointments
+  sanitizePublicAppointments,
 } from "./appointment";
 
 describe("appointment utilities", () => {
@@ -18,19 +18,21 @@ describe("appointment utilities", () => {
   it("detects overlaps using service duration", () => {
     expect(
       hasAppointmentConflict(
-        [{
-          nome: "",
-          telefone: "",
-          servico: "",
-          data: "2026-06-22",
-          horario: "09:00",
-          duracaoMinutos: 50,
-          status: "pendente"
-        }],
+        [
+          {
+            customerName: "",
+            customerPhone: "",
+            serviceName: "",
+            date: "2026-06-22",
+            time: "09:00",
+            durationMinutes: 50,
+            status: "pending",
+          },
+        ],
         "2026-06-22",
         "09:30",
-        30
-      )
+        30,
+      ),
     ).toBe(true);
   });
 
@@ -42,13 +44,15 @@ describe("appointment utilities", () => {
 
   it("removes private fields from public appointments", () => {
     expect(
-      sanitizePublicAppointments([{
-        nome: "João Silva",
-        telefone: "(27) 99999-9999",
-        servico: "Corte",
-        data: "2026-06-22",
-        horario: "10:00"
-      }])[0]
-    ).toMatchObject({ nome: "", telefone: "", servico: "" });
+      sanitizePublicAppointments([
+        {
+          customerName: "João Silva",
+          customerPhone: "(27) 99999-9999",
+          serviceName: "Corte",
+          date: "2026-06-22",
+          time: "10:00",
+        },
+      ])[0],
+    ).toMatchObject({ customerName: "", customerPhone: "", serviceName: "" });
   });
 });

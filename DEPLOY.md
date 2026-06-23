@@ -1,4 +1,4 @@
-# Deploy na Vercel
+# Deploy
 
 A aplicação usa:
 

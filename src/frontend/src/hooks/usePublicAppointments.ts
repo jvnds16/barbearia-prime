@@ -1,52 +1,56 @@
 import { useEffect, useRef, useState } from "react";
-import { schedulingService } from "../services/schedulingService";
-import { Agendamento } from "../types/scheduling";
+import { appointmentService } from "../services/appointmentService";
+import { Appointment } from "../types/appointment";
 import { sanitizePublicAppointments } from "../utils/appointment";
 import { addLocalDays, toDateValue } from "../utils/date";
 
 type RefreshResult = "remote" | "local" | "empty";
 
-export function usePublicAgenda() {
-  const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
-  const [horaAtual, setHoraAtual] = useState("");
-  const [dataAtual, setDataAtual] = useState("");
+const STORAGE_KEY = "appointments";
+const STORAGE_TIMESTAMP_KEY = "appointmentsTimestamp";
+
+export function usePublicAppointments() {
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [currentTime, setCurrentTime] = useState("");
+  const [currentDate, setCurrentDate] = useState("");
   const [showRefreshNotification, setShowRefreshNotification] = useState(false);
   const [refreshingAgenda, setRefreshingAgenda] = useState(false);
   const agendaRequestSequenceRef = useRef(0);
 
-  const getDataAtual = () => toDateValue(new Date());
-  const getDataAmanha = () => toDateValue(addLocalDays(new Date(), 1));
-  const isHoje = (date: string) => date === getDataAtual();
-  const isAmanha = (date: string) => date === getDataAmanha();
-  const getHoraAtual = () => {
+  const getCurrentDate = () => toDateValue(new Date());
+  const getTomorrowDate = () => toDateValue(addLocalDays(new Date(), 1));
+  const isToday = (date: string) => date === getCurrentDate();
+  const isTomorrow = (date: string) => date === getTomorrowDate();
+  const getCurrentTime = () => {
     const now = new Date();
     return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
   };
 
-  const fetchAgendamentos = async (
+  const fetchAppointments = async (
     forceRefresh = false,
-    notifyOnSuccess = true
+    notifyOnSuccess = true,
   ): Promise<RefreshResult> => {
     try {
-      const localData = localStorage.getItem("agendamentos");
+      const localData = localStorage.getItem(STORAGE_KEY);
       let hasLocalData = false;
       if (localData && !forceRefresh) {
         const parsedData = sanitizePublicAppointments(JSON.parse(localData));
-        localStorage.setItem("agendamentos", JSON.stringify(parsedData));
-        setAgendamentos(parsedData);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsedData));
+        setAppointments(parsedData);
         hasLocalData = true;
       }
 
       if (forceRefresh) {
         const requestSequence = ++agendaRequestSequenceRef.current;
-        const result = await schedulingService.list();
+        const result = await appointmentService.list();
         if (result.success && result.data) {
           const publicAppointments = sanitizePublicAppointments(result.data);
-          if (requestSequence !== agendaRequestSequenceRef.current) return "remote";
+          if (requestSequence !== agendaRequestSequenceRef.current)
+            return "remote";
 
-          localStorage.setItem("agendamentos", JSON.stringify(publicAppointments));
-          localStorage.setItem("agendamentosTimestamp", Date.now().toString());
-          setAgendamentos(publicAppointments);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(publicAppointments));
+          localStorage.setItem(STORAGE_TIMESTAMP_KEY, Date.now().toString());
+          setAppointments(publicAppointments);
           if (notifyOnSuccess) {
             setShowRefreshNotification(true);
             window.setTimeout(() => setShowRefreshNotification(false), 5000);
@@ -58,24 +62,27 @@ export function usePublicAgenda() {
 
       return hasLocalData ? "local" : "empty";
     } catch (error) {
-      console.error("Erro ao buscar agendamentos da API, usando localStorage:", error);
-      const localData = localStorage.getItem("agendamentos");
+      console.error(
+        "Error fetching appointments from API, using localStorage:",
+        error,
+      );
+      const localData = localStorage.getItem(STORAGE_KEY);
       if (localData) {
-        setAgendamentos(sanitizePublicAppointments(JSON.parse(localData)));
+        setAppointments(sanitizePublicAppointments(JSON.parse(localData)));
         return "local";
       }
       return "empty";
     }
   };
 
-  const atualizarAgendaManual = async () => {
+  const refreshAgendaManually = async () => {
     if (refreshingAgenda) return;
 
     setRefreshingAgenda(true);
     try {
       await Promise.all([
-        fetchAgendamentos(true, false),
-        new Promise((resolve) => window.setTimeout(resolve, 900))
+        fetchAppointments(true, false),
+        new Promise((resolve) => window.setTimeout(resolve, 900)),
       ]);
     } finally {
       setRefreshingAgenda(false);
@@ -86,9 +93,9 @@ export function usePublicAgenda() {
     const updateTime = () => {
       const now = new Date();
       const time = now.toLocaleTimeString("pt-BR", { hour12: false });
-      setHoraAtual(time);
-      setDataAtual(now.toLocaleDateString("pt-BR"));
-      if (time === "20:00:00") void fetchAgendamentos(true);
+      setCurrentTime(time);
+      setCurrentDate(now.toLocaleDateString("pt-BR"));
+      if (time === "20:00:00") void fetchAppointments(true);
     };
 
     updateTime();
@@ -98,22 +105,23 @@ export function usePublicAgenda() {
 
   useEffect(() => {
     const clearOldData = () => {
-      const timestamp = localStorage.getItem("agendamentosTimestamp");
+      const timestamp = localStorage.getItem(STORAGE_TIMESTAMP_KEY);
       if (timestamp && Date.now() - Number(timestamp) >= 24 * 60 * 60 * 1000) {
-        localStorage.removeItem("agendamentos");
-        localStorage.removeItem("agendamentosTimestamp");
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(STORAGE_TIMESTAMP_KEY);
       }
     };
 
     clearOldData();
-    void fetchAgendamentos(true, false);
+    void fetchAppointments(true, false);
     const interval = window.setInterval(clearOldData, 60 * 60 * 1000);
     return () => window.clearInterval(interval);
   }, []);
 
   useEffect(() => {
     const synchronizeAgenda = () => {
-      if (document.visibilityState === "visible") void fetchAgendamentos(true, false);
+      if (document.visibilityState === "visible")
+        void fetchAppointments(true, false);
     };
 
     const interval = window.setInterval(synchronizeAgenda, 15000);
@@ -128,11 +136,15 @@ export function usePublicAgenda() {
 
   useEffect(() => {
     const removePastAppointments = () => {
-      const saved = JSON.parse(localStorage.getItem("agendamentos") ?? "[]") as Agendamento[];
-      const current = saved.filter((appointment) => appointment.data >= getDataAtual());
+      const saved = JSON.parse(
+        localStorage.getItem(STORAGE_KEY) ?? "[]",
+      ) as Appointment[];
+      const current = saved.filter(
+        (appointment) => appointment.date >= getCurrentDate(),
+      );
       if (saved.length !== current.length) {
-        localStorage.setItem("agendamentos", JSON.stringify(current));
-        setAgendamentos(current);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+        setAppointments(current);
       }
     };
 
@@ -143,21 +155,21 @@ export function usePublicAgenda() {
 
   return {
     agendaRequestSequenceRef,
-    agendamentos,
-    atualizarAgendaManual,
-    dataAtual,
-    fetchAgendamentos,
-    getAgendamentosPorData: (date: string) =>
-      agendamentos.filter((appointment) => appointment.data === date),
-    getDataAmanha,
-    getDataAtual,
-    getHoraAtual,
-    horaAtual,
-    isAmanha,
-    isHoje,
+    appointments,
+    refreshAgendaManually,
+    currentDate,
+    fetchAppointments,
+    getAppointmentsByDate: (date: string) =>
+      appointments.filter((appointment) => appointment.date === date),
+    getTomorrowDate,
+    getCurrentDate,
+    getCurrentTime,
+    currentTime,
+    isTomorrow,
+    isToday,
     refreshingAgenda,
-    setAgendamentos,
+    setAppointments,
     setShowRefreshNotification,
-    showRefreshNotification
+    showRefreshNotification,
   };
 }

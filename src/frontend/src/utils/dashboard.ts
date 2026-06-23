@@ -1,55 +1,87 @@
-import { Agendamento, DashboardStats } from "../types/scheduling";
+import { Appointment, DashboardStats } from "../types/appointment";
 import { toDateValue } from "./date";
 
-export function calculateDashboardStats(appointments: Agendamento[]): DashboardStats {
+export function calculateDashboardStats(
+  appointments: Appointment[],
+): DashboardStats {
   const today = toDateValue(new Date());
   const currentMonth = today.substring(0, 7);
-  const validAppointments = appointments.filter((appointment) => appointment.status !== "cancelado");
-  const attendedAppointments = appointments.filter((appointment) => appointment.status === "presente");
+  const validAppointments = appointments.filter(
+    (appointment) => appointment.status !== "cancelled",
+  );
+  const attendedAppointments = appointments.filter(
+    (appointment) => appointment.status === "present",
+  );
 
-  const appointmentsToday = validAppointments.filter((appointment) => appointment.data === today);
-  const appointmentsThisMonth = validAppointments.filter((appointment) => appointment.data.startsWith(currentMonth));
-  const attendedToday = attendedAppointments.filter((appointment) => appointment.data === today);
-  const attendedThisMonth = attendedAppointments.filter((appointment) => appointment.data.startsWith(currentMonth));
-  const pendingThisMonth = appointmentsThisMonth.filter((appointment) => appointment.status === "pendente").length;
-  const absentThisMonth = appointmentsThisMonth.filter((appointment) => appointment.status === "ausente").length;
+  const appointmentsToday = validAppointments.filter(
+    (appointment) => appointment.date === today,
+  );
+  const appointmentsThisMonth = validAppointments.filter((appointment) =>
+    appointment.date.startsWith(currentMonth),
+  );
+  const attendedToday = attendedAppointments.filter(
+    (appointment) => appointment.date === today,
+  );
+  const attendedThisMonth = attendedAppointments.filter((appointment) =>
+    appointment.date.startsWith(currentMonth),
+  );
+  const pendingThisMonth = appointmentsThisMonth.filter(
+    (appointment) => appointment.status === "pending",
+  ).length;
+  const absentThisMonth = appointmentsThisMonth.filter(
+    (appointment) => appointment.status === "absent",
+  ).length;
 
-  const profitToday = attendedToday.reduce((total, appointment) => total + (appointment.preco || 0), 0);
-  const monthlyProfit = attendedThisMonth.reduce((total, appointment) => total + (appointment.preco || 0), 0);
+  const profitToday = attendedToday.reduce(
+    (total, appointment) => total + (appointment.price || 0),
+    0,
+  );
+  const monthlyProfit = attendedThisMonth.reduce(
+    (total, appointment) => total + (appointment.price || 0),
+    0,
+  );
 
-  const profitsByDay = attendedThisMonth.reduce((result, appointment) => {
-    result[appointment.data] = (result[appointment.data] || 0) + (appointment.preco || 0);
-    return result;
-  }, {} as Record<string, number>);
+  const profitsByDay = attendedThisMonth.reduce(
+    (result, appointment) => {
+      result[appointment.date] =
+        (result[appointment.date] || 0) + (appointment.price || 0);
+      return result;
+    },
+    {} as Record<string, number>,
+  );
 
-  const services = attendedThisMonth.reduce((result, appointment) => {
-    if (!result[appointment.servico]) {
-      result[appointment.servico] = { quantidade: 0, lucroTotal: 0 };
-    }
-    result[appointment.servico].quantidade += 1;
-    result[appointment.servico].lucroTotal += appointment.preco || 0;
-    return result;
-  }, {} as Record<string, { quantidade: number; lucroTotal: number }>);
+  const services = attendedThisMonth.reduce(
+    (result, appointment) => {
+      if (!result[appointment.serviceName]) {
+        result[appointment.serviceName] = { quantity: 0, totalProfit: 0 };
+      }
+      result[appointment.serviceName].quantity += 1;
+      result[appointment.serviceName].totalProfit += appointment.price || 0;
+      return result;
+    },
+    {} as Record<string, { quantity: number; totalProfit: number }>,
+  );
 
   const popularServices = Object.entries(services)
-    .map(([servico, stats]) => ({ servico, ...stats }))
-    .sort((first, second) => second.quantidade - first.quantidade)
+    .map(([serviceName, stats]) => ({ serviceName, ...stats }))
+    .sort((first, second) => second.quantity - first.quantity)
     .slice(0, 5);
 
   const daysWithAppointments = Object.keys(profitsByDay).length;
 
   return {
-    lucroHoje: profitToday,
-    lucroMensal: monthlyProfit,
-    totalAgendamentos: validAppointments.length,
-    mediaDiaria: daysWithAppointments > 0 ? monthlyProfit / daysWithAppointments : 0,
-    agendamentosHoje: appointmentsToday.length,
-    agendamentosMes: appointmentsThisMonth.length,
-    atendimentosHoje: attendedToday.length,
-    atendimentosMes: attendedThisMonth.length,
-    pendentesMes: pendingThisMonth,
-    ausentesMes: absentThisMonth,
-    lucrosPorDia: profitsByDay,
-    servicosMaisPopulares: popularServices
+    todayProfit: profitToday,
+    monthlyProfit: monthlyProfit,
+    totalAppointments: validAppointments.length,
+    dailyAverage:
+      daysWithAppointments > 0 ? monthlyProfit / daysWithAppointments : 0,
+    todayAppointments: appointmentsToday.length,
+    monthlyAppointments: appointmentsThisMonth.length,
+    todayAttendances: attendedToday.length,
+    monthlyAttendances: attendedThisMonth.length,
+    monthlyPending: pendingThisMonth,
+    monthlyAbsent: absentThisMonth,
+    dailyProfits: profitsByDay,
+    mostPopularServices: popularServices,
   };
 }

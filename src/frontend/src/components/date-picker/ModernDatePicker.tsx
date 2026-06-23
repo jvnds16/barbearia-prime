@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { IconCalendarEvent } from "@tabler/icons-react";
-import { useDatePicker } from "../hooks/useDatePicker";
-import { parseLocalDate, toDateValue } from "../utils/date";
+import { useDatePicker } from "../../hooks/useDatePicker";
+import { parseLocalDate, toDateValue } from "../../utils/date";
 
 type ModernDatePickerProps = {
   value: string;
@@ -18,12 +18,25 @@ export function ModernDatePicker({
   max,
   onChange,
   placeholder = "Escolha uma data",
-  ariaLabel = "Escolher data"
+  ariaLabel = "Escolher data",
 }: ModernDatePickerProps) {
   const {
-    canGoNext, canGoPrevious, containerRef, days, maxDate, minDate, nextMonth,
-    open, previousMonth, selectedDate, selectDate, setOpen, setVisibleMonth,
-    todayValue, visibleMonth, formattedMonthTitle
+    canGoNext,
+    canGoPrevious,
+    containerRef,
+    days,
+    maxDate,
+    minDate,
+    nextMonth,
+    open,
+    previousMonth,
+    selectedDate,
+    selectDate,
+    setOpen,
+    setVisibleMonth,
+    todayValue,
+    visibleMonth,
+    formattedMonthTitle,
   } = useDatePicker({ value, min, max, onChange, preferToday: true });
 
   return (
@@ -37,7 +50,11 @@ export function ModernDatePicker({
       >
         <span className={selectedDate ? "text-white" : "text-zinc-400"}>
           {selectedDate
-            ? selectedDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })
+            ? selectedDate.toLocaleDateString("pt-BR", {
+                day: "2-digit",
+                month: "long",
+                year: "numeric",
+              })
             : placeholder}
         </span>
         <span className="ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-amber-400/25 bg-amber-400/10 text-amber-300 transition group-hover:border-amber-400/45">
@@ -61,7 +78,9 @@ export function ModernDatePicker({
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
-            <strong className="text-sm text-white">{formattedMonthTitle}</strong>
+            <strong className="text-sm text-white">
+              {formattedMonthTitle}
+            </strong>
             <button
               type="button"
               onClick={() => canGoNext && setVisibleMonth(nextMonth)}
@@ -75,17 +94,19 @@ export function ModernDatePicker({
 
           <div className="grid grid-cols-7 gap-1 text-center">
             {["D", "S", "T", "Q", "Q", "S", "S"].map((day, index) => (
-              <span key={`${day}-${index}`} className="py-1 text-[0.65rem] font-bold text-zinc-600">
+              <span
+                key={`${day}-${index}`}
+                className="py-1 text-[0.65rem] font-bold text-zinc-600"
+              >
                 {day}
               </span>
             ))}
             {days.map((date) => {
               const dateValue = toDateValue(date);
-              const isCurrentMonth = date.getMonth() === visibleMonth.getMonth();
+              const isCurrentMonth =
+                date.getMonth() === visibleMonth.getMonth();
               const isDisabled =
-                !isCurrentMonth ||
-                date < minDate ||
-                date > maxDate;
+                !isCurrentMonth || date < minDate || date > maxDate;
               const isSelected = dateValue === value;
               const isToday = dateValue === todayValue;
 
@@ -102,11 +123,17 @@ export function ModernDatePicker({
                         ? "cursor-not-allowed text-zinc-800"
                         : "text-zinc-300 hover:bg-amber-400/10 hover:text-amber-300"
                   }`}
-                  aria-label={date.toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" })}
+                  aria-label={date.toLocaleDateString("pt-BR", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
                   aria-pressed={isSelected}
                 >
                   {date.getDate()}
-                  {isToday && !isSelected && <span className="absolute bottom-1 h-1 w-1 rounded-full bg-amber-400" />}
+                  {isToday && !isSelected && (
+                    <span className="absolute bottom-1 h-1 w-1 rounded-full bg-amber-400" />
+                  )}
                 </button>
               );
             })}

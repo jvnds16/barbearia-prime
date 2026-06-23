@@ -1,31 +1,56 @@
-import { useState, useEffect, useRef, ChangeEvent, FocusEvent, FormEvent } from "react";
-import { Calendar, Scissors, X, RefreshCw, CheckCircle2, ChevronDown, ShieldCheck } from "lucide-react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  ChangeEvent,
+  FocusEvent,
+  FormEvent,
+} from "react";
+import {
+  Calendar,
+  Scissors,
+  X,
+  RefreshCw,
+  CheckCircle2,
+  ChevronDown,
+  ShieldCheck,
+} from "lucide-react";
 import {
   IconAlarm,
   IconAlertSquareRounded,
   IconBrandMessenger,
   IconPhone,
   IconUserFilled,
-} from '@tabler/icons-react';
-import { schedulingService } from "../services/schedulingService";
+} from "@tabler/icons-react";
+import { appointmentService } from "../services/appointmentService";
 import { defaultServices, listServices } from "../services/serviceCatalog";
-import { Agendamento } from "../types/scheduling";
+import { Appointment } from "../types/appointment";
 import { ApiError } from "../services/api";
-import { PublicDatePicker } from "../components/PublicDatePicker";
+import { PublicDatePicker } from "../components/date-picker/PublicDatePicker";
 import {
   createAvailableTimes,
   formatPhone,
   hasAppointmentConflict,
   isValidPhone,
-  sanitizePublicAppointments
+  sanitizePublicAppointments,
 } from "../utils/appointment";
 import { formatDisplayDate } from "../utils/date";
-import { SchedulingModals } from "../components/scheduling/SchedulingModals";
-import { usePublicAgenda } from "../hooks/usePublicAgenda";
-import { ContactSection, HomeHero, MobileMenu, ServicesSection } from "../components/home/HomeSections";
-import { AvailabilityPanel } from "../components/scheduling/AvailabilityPanel";
+import { AppointmentModals } from "../components/appointments/AppointmentModals";
+import { usePublicAppointments } from "../hooks/usePublicAppointments";
+import {
+  ContactSection,
+  HomeHero,
+  MobileMenu,
+  ServicesSection,
+} from "../components/home/HomeSections";
+import { AvailabilityPanel } from "../components/appointments/AvailabilityPanel";
 
-type FormField = "nome" | "telefone" | "servico" | "data" | "horario";
+type FormField =
+  | "customerName"
+  | "customerPhone"
+  | "serviceName"
+  | "date"
+  | "time";
 type FormErrors = Partial<Record<FormField, string>>;
 type StatusModal = {
   type: "success" | "error";
@@ -34,6 +59,55 @@ type StatusModal = {
   actionUrl?: string;
   actionLabel?: string;
 } | null;
+
+const STORAGE_KEY = "appointments";
+const STORAGE_TIMESTAMP_KEY = "appointmentsTimestamp";
+
+// Mensagens de validação em português
+const VALIDATION_MESSAGES = {
+  NAME_REQUIRED: "Informe seu nome completo.",
+  NAME_MIN_LENGTH: "O nome precisa ter pelo menos 3 caracteres.",
+  NAME_FULL: "Informe nome e sobrenome.",
+  PHONE_REQUIRED: "Informe um telefone com DDD.",
+  PHONE_INVALID: "Use um telefone válido. Ex.: (27) 91234-5678.",
+  SERVICE_REQUIRED: "Selecione um serviço.",
+  SERVICE_INVALID: "Selecione um serviço válido.",
+  DATE_REQUIRED: "Escolha uma data.",
+  DATE_INVALID: "Escolha uma data válida.",
+  DATE_PAST: "Escolha uma data a partir de hoje.",
+  DATE_FUTURE: "Agende com, no máximo, 30 dias de antecedência.",
+  TIME_REQUIRED: "Escolha um horário.",
+  TIME_UNAVAILABLE: "Este horário não está disponível para a data selecionada.",
+  TIME_TAKEN: "Este horário acabou de ser ocupado. Escolha outro.",
+  FORM_ERROR: "Revise os campos destacados antes de continuar.",
+  PRICE_NOT_FOUND: "Preço do serviço não encontrado. Tente novamente.",
+  SCHEDULE_UPDATED:
+    "A agenda foi atualizada. Escolha outro horário disponível.",
+  SYNC_ERROR:
+    "Não foi possível atualizar os horários agora. Verifique sua conexão e tente novamente.",
+  PHONE_INVALID_SUBMIT:
+    "⚠️ Por favor, insira um telefone válido com DDD. Ex: (27) 91234-5678",
+  DATE_PAST_SUBMIT:
+    "⚠️ Não é possível marcar para datas passadas. Por favor, escolha uma data futura.",
+  TIME_TODAY_ADVANCE:
+    "⚠️ Para agendamentos de hoje, escolha um horário com pelo menos 30 minutos de antecedência.",
+  SERVICE_NOT_SELECTED: "Por favor, selecione um serviço.",
+  TIME_CONFLICT:
+    "Esse horário já está ocupado. Redirecionando para o WhatsApp do barbeiro para verificar outros horários...",
+  PRICE_ERROR: "⚠️ Erro: Preço do serviço não encontrado. Tente novamente.",
+  SUCCESS: "Agendamento realizado com sucesso!",
+  CONFIRM_TITLE: "Agendamento confirmado",
+  CONFIRM_MESSAGE:
+    "Seu horário foi registrado e a agenda já foi atualizada. Esta confirmação fechará automaticamente.",
+  WHATSAPP_LABEL: "Abrir WhatsApp",
+  CONNECTION_ERROR:
+    "A conexão foi interrompida. Verifique sua internet e tente novamente.",
+  GENERIC_ERROR: "Não foi possível concluir o agendamento. Tente novamente.",
+  UNAVAILABLE_TITLE: "Horário indisponível",
+  SCHEDULE_ERROR_TITLE: "Não foi possível agendar",
+  CONFIRM_ERROR_TITLE: "Não foi possível confirmar",
+} as const;
+
 function App() {
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
@@ -42,112 +116,145 @@ function App() {
   const [fieldErrors, setFieldErrors] = useState<FormErrors>({});
   const [reviewModalOpen, setReviewModalOpen] = useState<boolean>(false);
   const [statusModal, setStatusModal] = useState<StatusModal>(null);
-  const [formData, setFormData] = useState<Agendamento>({
-    nome: "",
-    telefone: "",
-    servico: "",
-    data: "",
-    horario: "",
+  const [formData, setFormData] = useState<Appointment>({
+    customerName: "",
+    customerPhone: "",
+    serviceName: "",
+    date: "",
+    time: "",
   });
-  const [servicos, setServicos] = useState(defaultServices);
-  const schedulingInFlightRef = useRef(false);
+  const [services, setServices] = useState(defaultServices);
+  const appointmentInFlightRef = useRef(false);
   const {
-    agendaRequestSequenceRef, agendamentos, atualizarAgendaManual, dataAtual,
-    fetchAgendamentos, getAgendamentosPorData, getDataAmanha, getDataAtual,
-    getHoraAtual, horaAtual, isAmanha, isHoje, refreshingAgenda,
-    setAgendamentos, setShowRefreshNotification, showRefreshNotification
-  } = usePublicAgenda();
+    agendaRequestSequenceRef,
+    appointments,
+    refreshAgendaManually,
+    currentDate,
+    fetchAppointments,
+    getAppointmentsByDate,
+    getTomorrowDate,
+    getCurrentDate,
+    getCurrentTime,
+    currentTime,
+    isTomorrow,
+    isToday,
+    refreshingAgenda,
+    setAppointments,
+    setShowRefreshNotification,
+    showRefreshNotification,
+  } = usePublicAppointments();
 
   useEffect(() => {
-    const carregarServicos = async () => {
+    const loadServices = async () => {
       try {
         const result = await listServices();
         if (result.success && result.data?.length) {
-          setServicos(result.data);
+          setServices(result.data);
         }
       } catch (error) {
-        console.error("Erro ao carregar serviços da API, usando a alternativa local:", error);
+        console.error(
+          "Erro ao carregar serviços da API, usando alternativa local:",
+          error,
+        );
       }
     };
 
-    carregarServicos();
+    loadServices();
   }, []);
 
-  const getDataMinima = (): string => {
-    return getDataAtual();
-  };
+  const getMinDate = (): string => getCurrentDate();
 
-  const getDataMaxima = (): string => {
-    const agora = new Date();
-    const dataMaxima = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate() + 30);
-    const ano = dataMaxima.getFullYear();
-    const mes = (dataMaxima.getMonth() + 1).toString().padStart(2, '0');
-    const dia = dataMaxima.getDate().toString().padStart(2, '0');
-    return `${ano}-${mes}-${dia}`;
-  };
-
-  const horariosDisponiveisBase = createAvailableTimes();
-  const selectedService = servicos.find(s => s.nome === formData.servico);
-  const selectedServiceDuration = Number.parseInt(selectedService?.duracao || "30", 10) || 30;
-
-  const horariosFiltrados = formData.data ? horariosDisponiveisBase.filter((h) => {
-    const ocupado = hasAppointmentConflict(
-      agendamentos,
-      formData.data,
-      h,
-      selectedServiceDuration
+  const getMaxDate = (): string => {
+    const now = new Date();
+    const maxDate = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + 30,
     );
+    const year = maxDate.getFullYear();
+    const month = (maxDate.getMonth() + 1).toString().padStart(2, "0");
+    const day = maxDate.getDate().toString().padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
 
-    if (isHoje(formData.data)) {
-      const horaAtual = getHoraAtual();
-      const minutosAtuais = parseInt(horaAtual.split(":")[0]) * 60 + parseInt(horaAtual.split(":")[1]);
-      const minutosAgendamento = parseInt(h.split(":")[0]) * 60 + parseInt(h.split(":")[1]);
-      return (minutosAgendamento > minutosAtuais + 30) && !ocupado;
-    }
+  const availableTimesBase = createAvailableTimes();
+  const selectedService = services.find((s) => s.name === formData.serviceName);
+  const selectedServiceDuration =
+    selectedService?.durationMinutes ||
+    Number.parseInt(selectedService?.duration || "30", 10) ||
+    30;
 
-    return !ocupado;
-  }) : horariosDisponiveisBase;
+  const filteredTimes = formData.date
+    ? availableTimesBase.filter((time) => {
+        const occupied = hasAppointmentConflict(
+          appointments,
+          formData.date,
+          time,
+          selectedServiceDuration,
+        );
 
-  const validateField = (name: FormField, value: string, data = formData): string => {
+        if (isToday(formData.date)) {
+          const currentT = getCurrentTime();
+          const currentMinutes =
+            parseInt(currentT.split(":")[0]) * 60 +
+            parseInt(currentT.split(":")[1]);
+          const appointmentMinutes =
+            parseInt(time.split(":")[0]) * 60 + parseInt(time.split(":")[1]);
+          return appointmentMinutes > currentMinutes + 30 && !occupied;
+        }
+
+        return !occupied;
+      })
+    : availableTimesBase;
+
+  const validateField = (
+    name: FormField,
+    value: string,
+    data = formData,
+  ): string => {
     const cleanedValue = value.trim();
 
-    if (name === "nome") {
-      if (!cleanedValue) return "Informe seu nome completo.";
-      if (cleanedValue.length < 3) return "O nome precisa ter pelo menos 3 caracteres.";
+    if (name === "customerName") {
+      if (!cleanedValue) return VALIDATION_MESSAGES.NAME_REQUIRED;
+      if (cleanedValue.length < 3) return VALIDATION_MESSAGES.NAME_MIN_LENGTH;
       if (cleanedValue.replace(/\s+/g, " ").split(" ").length < 2) {
-        return "Informe nome e sobrenome.";
+        return VALIDATION_MESSAGES.NAME_FULL;
       }
     }
 
-    if (name === "telefone") {
-      if (!cleanedValue) return "Informe um telefone com DDD.";
-      if (!isValidPhone(cleanedValue)) return "Use um telefone válido. Ex.: (27) 91234-5678.";
+    if (name === "customerPhone") {
+      if (!cleanedValue) return VALIDATION_MESSAGES.PHONE_REQUIRED;
+      if (!isValidPhone(cleanedValue)) return VALIDATION_MESSAGES.PHONE_INVALID;
     }
 
-    if (name === "servico" && !cleanedValue) {
-      return "Selecione um serviço.";
+    if (name === "serviceName" && !cleanedValue) {
+      return VALIDATION_MESSAGES.SERVICE_REQUIRED;
     }
 
-    if (name === "servico" && !servicos.some((servico) => servico.nome === cleanedValue)) {
-      return "Selecione um serviço válido.";
+    if (
+      name === "serviceName" &&
+      !services.some((service) => service.name === cleanedValue)
+    ) {
+      return VALIDATION_MESSAGES.SERVICE_INVALID;
     }
 
-    if (name === "data") {
-      if (!cleanedValue) return "Escolha uma data.";
+    if (name === "date") {
+      if (!cleanedValue) return VALIDATION_MESSAGES.DATE_REQUIRED;
 
-      const dataSelecionada = new Date(cleanedValue + 'T00:00:00');
-      const dataHoje = new Date(getDataAtual() + 'T00:00:00');
-      const dataMaxima = new Date(getDataMaxima() + 'T00:00:00');
+      const selectedDate = new Date(cleanedValue + "T00:00:00");
+      const todayDate = new Date(getCurrentDate() + "T00:00:00");
+      const maxDateValue = new Date(getMaxDate() + "T00:00:00");
 
-      if (Number.isNaN(dataSelecionada.getTime())) return "Escolha uma data valida.";
-      if (dataSelecionada < dataHoje) return "Escolha uma data a partir de hoje.";
-      if (dataSelecionada > dataMaxima) return "Agende com, no máximo, 30 dias de antecedência.";
+      if (Number.isNaN(selectedDate.getTime()))
+        return VALIDATION_MESSAGES.DATE_INVALID;
+      if (selectedDate < todayDate) return VALIDATION_MESSAGES.DATE_PAST;
+      if (selectedDate > maxDateValue) return VALIDATION_MESSAGES.DATE_FUTURE;
     }
 
-    if (name === "horario") {
-      if (!cleanedValue) return "Escolha um horário.";
-      if (data.data && !horariosFiltrados.includes(cleanedValue)) {
-        return "Este horário não está disponível para a data selecionada.";
+    if (name === "time") {
+      if (!cleanedValue) return VALIDATION_MESSAGES.TIME_REQUIRED;
+      if (data.date && !filteredTimes.includes(cleanedValue)) {
+        return VALIDATION_MESSAGES.TIME_UNAVAILABLE;
       }
     }
 
@@ -156,34 +263,37 @@ function App() {
 
   const validateForm = (): boolean => {
     const nextErrors: FormErrors = {
-      nome: validateField("nome", formData.nome),
-      telefone: validateField("telefone", formData.telefone),
-      servico: validateField("servico", formData.servico),
-      data: validateField("data", formData.data),
-      horario: validateField("horario", formData.horario),
+      customerName: validateField("customerName", formData.customerName),
+      customerPhone: validateField("customerPhone", formData.customerPhone),
+      serviceName: validateField("serviceName", formData.serviceName),
+      date: validateField("date", formData.date),
+      time: validateField("time", formData.time),
     };
 
-    const conflito = agendamentos.find(
-      (a: Agendamento) => a.status !== "cancelado" && a.data === formData.data && a.horario === formData.horario
+    const conflict = appointments.find(
+      (a: Appointment) =>
+        a.status !== "cancelled" &&
+        a.date === formData.date &&
+        a.time === formData.time,
     );
 
-    if (conflito) {
-      nextErrors.horario = "Este horário acabou de ser ocupado. Escolha outro.";
+    if (conflict) {
+      nextErrors.time = VALIDATION_MESSAGES.TIME_TAKEN;
     }
 
     const cleanErrors = Object.fromEntries(
-      Object.entries(nextErrors).filter(([, value]) => Boolean(value))
+      Object.entries(nextErrors).filter(([, value]) => Boolean(value)),
     ) as FormErrors;
 
     setFieldErrors(cleanErrors);
 
     if (Object.keys(cleanErrors).length > 0) {
-      setError("Revise os campos destacados antes de continuar.");
+      setError(VALIDATION_MESSAGES.FORM_ERROR);
       return false;
     }
 
-    if (!selectedService?.preco) {
-      setError("Preço do serviço não encontrado. Tente novamente.");
+    if (!selectedService?.price) {
+      setError(VALIDATION_MESSAGES.PRICE_NOT_FOUND);
       return false;
     }
 
@@ -198,35 +308,34 @@ function App() {
         : "border-zinc-700 hover:border-zinc-500 focus:border-amber-400"
     }`;
 
-  const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (
+    e: ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+  ) => {
     const { name, value } = e.target;
     const fieldName = name as FormField;
-    const nextValue = fieldName === "telefone" ? formatPhone(value) : value;
+    const nextValue =
+      fieldName === "customerPhone" ? formatPhone(value) : value;
 
     setFormData((prev) => ({
       ...prev,
       [fieldName]: nextValue,
-      ...(fieldName === "data" ? { horario: "" } : {}),
+      ...(fieldName === "date" ? { time: "" } : {}),
     }));
 
     setFieldErrors((prev) => {
       const next = { ...prev };
       delete next[fieldName];
-      if (fieldName === "data") delete next.horario;
+      if (fieldName === "date") delete next.time;
       return next;
     });
   };
 
   const handleDateChange = (value: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      data: value,
-      horario: "",
-    }));
+    setFormData((prev) => ({ ...prev, date: value, time: "" }));
     setFieldErrors((prev) => {
       const next = { ...prev };
-      delete next.data;
-      delete next.horario;
+      delete next.date;
+      delete next.time;
       return next;
     });
   };
@@ -254,43 +363,51 @@ function App() {
 
     try {
       const requestSequence = ++agendaRequestSequenceRef.current;
-      const result = await schedulingService.list({ data: formData.data });
+      const result = await appointmentService.list({ date: formData.date });
       const latestAppointments = sanitizePublicAppointments(result.data || []);
-      const otherDates = agendamentos.filter((appointment) => appointment.data !== formData.data);
+      const otherDates = appointments.filter(
+        (appointment) => appointment.date !== formData.date,
+      );
       const synchronizedAppointments = [...otherDates, ...latestAppointments];
 
       if (requestSequence === agendaRequestSequenceRef.current) {
-        setAgendamentos(synchronizedAppointments);
-        localStorage.setItem("agendamentos", JSON.stringify(synchronizedAppointments));
-        localStorage.setItem("agendamentosTimestamp", Date.now().toString());
+        setAppointments(synchronizedAppointments);
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify(synchronizedAppointments),
+        );
+        localStorage.setItem(STORAGE_TIMESTAMP_KEY, Date.now().toString());
       }
 
       if (
         hasAppointmentConflict(
           latestAppointments,
-          formData.data,
-          formData.horario,
-          selectedServiceDuration
+          formData.date,
+          formData.time,
+          selectedServiceDuration,
         )
       ) {
         setFieldErrors((current) => ({
           ...current,
-          horario: "Este horário acabou de ser ocupado. Escolha outro."
+          time: VALIDATION_MESSAGES.TIME_TAKEN,
         }));
-        setError("A agenda foi atualizada. Escolha outro horário disponível.");
+        setError(VALIDATION_MESSAGES.SCHEDULE_UPDATED);
         return;
       }
     } catch (error) {
-      console.error("Não foi possível sincronizar a agenda antes da revisão:", error);
-      setError("Não foi possível atualizar os horários agora. Verifique sua conexão e tente novamente.");
+      console.error(
+        "Não foi possível sincronizar a agenda antes da revisão:",
+        error,
+      );
+      setError(VALIDATION_MESSAGES.SYNC_ERROR);
       return;
     }
 
     setReviewModalOpen(true);
   };
 
-  const confirmarAgendamento = async () => {
-    if (schedulingInFlightRef.current) return;
+  const confirmAppointment = async () => {
+    if (appointmentInFlightRef.current) return;
 
     if (!validateForm()) {
       setReviewModalOpen(false);
@@ -302,117 +419,128 @@ function App() {
     setLoading(true);
     setSuccessMessage("");
 
-    if (!isValidPhone(formData.telefone)) {
-      setError("⚠️ Por favor, insira um telefone válido com DDD. Ex: (27) 91234-5678");
+    if (!isValidPhone(formData.customerPhone)) {
+      setError(VALIDATION_MESSAGES.PHONE_INVALID_SUBMIT);
       setLoading(false);
       return;
     }
 
-    const dataSelecionada = new Date(formData.data + 'T00:00:00');
-    const dataHoje = new Date(getDataAtual() + 'T00:00:00');
+    const selectedDate = new Date(formData.date + "T00:00:00");
+    const todayDate = new Date(getCurrentDate() + "T00:00:00");
 
-    if (dataSelecionada < dataHoje) {
-      setError("⚠️ Não é possível marcar para datas passadas. Por favor, escolha uma data futura.");
+    if (selectedDate < todayDate) {
+      setError(VALIDATION_MESSAGES.DATE_PAST_SUBMIT);
       setLoading(false);
       return;
     }
 
-    if (isHoje(formData.data)) {
-      const horaAtual = getHoraAtual();
-      const minutosAtuais = parseInt(horaAtual.split(":")[0]) * 60 + parseInt(horaAtual.split(":")[1]);
-      const minutosAgendamento = parseInt(formData.horario.split(":")[0]) * 60 + parseInt(formData.horario.split(":")[1]);
+    if (isToday(formData.date)) {
+      const currentT = getCurrentTime();
+      const currentMinutes =
+        parseInt(currentT.split(":")[0]) * 60 +
+        parseInt(currentT.split(":")[1]);
+      const appointmentMinutes =
+        parseInt(formData.time.split(":")[0]) * 60 +
+        parseInt(formData.time.split(":")[1]);
 
-      if (minutosAgendamento <= minutosAtuais + 30) {
-        setError("⚠️ Para agendamentos de hoje, escolha um horário com pelo menos 30 minutos de antecedência.");
+      if (appointmentMinutes <= currentMinutes + 30) {
+        setError(VALIDATION_MESSAGES.TIME_TODAY_ADVANCE);
         setLoading(false);
         return;
       }
     }
 
-    if (!formData.servico) {
-      setError("Por favor, selecione um serviço.");
+    if (!formData.serviceName) {
+      setError(VALIDATION_MESSAGES.SERVICE_NOT_SELECTED);
       setLoading(false);
       return;
     }
 
-    const conflito = agendamentos.find(
-      (a: Agendamento) => a.status !== "cancelado" && a.data === formData.data && a.horario === formData.horario
+    const conflict = appointments.find(
+      (a: Appointment) =>
+        a.status !== "cancelled" &&
+        a.date === formData.date &&
+        a.time === formData.time,
     );
 
-    if (conflito) {
-      const mensagemConflito = encodeURIComponent(
-        `Olá! Vi que o horário ${formData.horario} do dia ${formatDisplayDate(formData.data)} está ocupado.` +
-        ` Gostaria de verificar outros horários disponíveis para o serviço ${formData.servico}.`
+    if (conflict) {
+      const conflictMessage = encodeURIComponent(
+        `Olá! Vi que o horário ${formData.time} do dia ${formatDisplayDate(formData.date)} está ocupado.` +
+          ` Gostaria de verificar outros horários disponíveis para o serviço ${formData.serviceName}.`,
       );
-      const numeroBarbearia = "5527981911375";
-      window.open(`https://wa.me/${numeroBarbearia}?text=${mensagemConflito}`, "_blank");
-      setError("Esse horário já está ocupado. Redirecionando para o WhatsApp do barbeiro para verificar outros horários...");
+      const barbershopNumber = "5527981911375";
+      window.open(
+        `https://wa.me/${barbershopNumber}?text=${conflictMessage}`,
+        "_blank",
+      );
+      setError(VALIDATION_MESSAGES.TIME_CONFLICT);
       setLoading(false);
       return;
     }
 
-    const servicoSelecionado = servicos.find(s => s.nome === formData.servico);
-    const preco = servicoSelecionado?.preco || 0;
+    const selectedServiceData = services.find(
+      (s) => s.name === formData.serviceName,
+    );
+    const price = selectedServiceData?.price || 0;
 
-    if (!preco || preco === 0) {
-      setError("⚠️ Erro: Preço do serviço não encontrado. Tente novamente.");
+    if (!price || price === 0) {
+      setError(VALIDATION_MESSAGES.PRICE_ERROR);
       setLoading(false);
       return;
     }
 
-    const novoAgendamento: Agendamento = {
+    const newAppointment: Appointment = {
       ...formData,
-      preco,
+      price,
       idempotencyKey: crypto.randomUUID(),
-      timestamp: new Date().getTime()
+      timestamp: new Date().getTime(),
     };
 
-    schedulingInFlightRef.current = true;
+    appointmentInFlightRef.current = true;
 
     try {
-      const result = await schedulingService.create({
-        ...novoAgendamento,
+      const result = await appointmentService.create({
+        ...newAppointment,
         timestamp: new Date().getTime(),
-        status: 'pendente'
+        status: "pending",
       });
-      console.log('Resposta do servidor:', result);
+      console.log("Resposta do servidor:", result);
 
-      const mensagem = encodeURIComponent(
+      const message = encodeURIComponent(
         `*Novo Agendamento Confirmado* 📅\n\n` +
-        `👤 Nome: ${formData.nome}\n` +
-        `📞 Telefone: ${formData.telefone}\n` +
-        `✂️ Serviço: ${formData.servico}\n` +
-        `📅 Data: ${formatDisplayDate(formData.data)}\n` +
-        `⏰ Horário: ${formData.horario}\n` +
-        `✅ Confirmação automática via site\n\n` +
-        `📲 *Link do Agendamento:* ${window.location.origin}/`
+          `👤 Nome: ${formData.customerName}\n` +
+          `📞 Telefone: ${formData.customerPhone}\n` +
+          `✂️ Serviço: ${formData.serviceName}\n` +
+          `📅 Data: ${formatDisplayDate(formData.date)}\n` +
+          `⏰ Horário: ${formData.time}\n` +
+          `✅ Confirmação automática via site\n\n` +
+          `📲 *Link do Agendamento:* ${window.location.origin}/`,
       );
-      const whatsappUrl = `https://wa.me/5527981911375?text=${mensagem}`;
+      const whatsappUrl = `https://wa.me/5527981911375?text=${message}`;
 
-      const agendamentoPublico = sanitizePublicAppointments([result.data])[0];
-      setAgendamentos((agendamentosAtuais) => {
-        const semHorarioDuplicado = agendamentosAtuais.filter(
-          (agendamento) =>
-            agendamento.data !== agendamentoPublico.data ||
-            agendamento.horario !== agendamentoPublico.horario
+      const publicAppointment = sanitizePublicAppointments([result.data])[0];
+      setAppointments((currentAppointments) => {
+        const withoutDuplicateTime = currentAppointments.filter(
+          (appointment) =>
+            appointment.date !== publicAppointment.date ||
+            appointment.time !== publicAppointment.time,
         );
-        const novosAgendamentos = [...semHorarioDuplicado, agendamentoPublico];
-        localStorage.setItem("agendamentos", JSON.stringify(novosAgendamentos));
-        localStorage.setItem("agendamentosTimestamp", Date.now().toString());
-        return novosAgendamentos;
+        const newAppointments = [...withoutDuplicateTime, publicAppointment];
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(newAppointments));
+        localStorage.setItem(STORAGE_TIMESTAMP_KEY, Date.now().toString());
+        return newAppointments;
       });
 
-      setSuccessMessage("Agendamento realizado com sucesso!");
+      setSuccessMessage(VALIDATION_MESSAGES.SUCCESS);
       setStatusModal({
         type: "success",
-        title: "Agendamento confirmado",
-        message: "Seu horário foi registrado e a agenda já foi atualizada. Esta confirmação fechará automaticamente.",
+        title: VALIDATION_MESSAGES.CONFIRM_TITLE,
+        message: VALIDATION_MESSAGES.CONFIRM_MESSAGE,
         actionUrl: whatsappUrl,
-        actionLabel: "Abrir WhatsApp"
+        actionLabel: VALIDATION_MESSAGES.WHATSAPP_LABEL,
       });
 
-      void fetchAgendamentos(true, false);
-
+      void fetchAppointments(true, false);
     } catch (error: unknown) {
       console.error("Erro ao salvar agendamento:", error);
 
@@ -422,15 +550,17 @@ function App() {
         if (isConflict) {
           setFieldErrors((prev) => ({
             ...prev,
-            horario: "Este horário acabou de ser ocupado. Escolha outro."
+            time: VALIDATION_MESSAGES.TIME_TAKEN,
           }));
-          await fetchAgendamentos(true, false);
+          await fetchAppointments(true, false);
         }
 
         setStatusModal({
           type: "error",
-          title: isConflict ? "Horário indisponível" : "Não foi possível agendar",
-          message: error.message
+          title: isConflict
+            ? VALIDATION_MESSAGES.UNAVAILABLE_TITLE
+            : VALIDATION_MESSAGES.SCHEDULE_ERROR_TITLE,
+          message: error.message,
         });
         setError(error.message);
         setLoading(false);
@@ -439,28 +569,29 @@ function App() {
 
       setStatusModal({
         type: "error",
-        title: "Não foi possível confirmar",
-        message: error instanceof TypeError
-          ? "A conexão foi interrompida. Verifique sua internet e tente novamente."
-          : "Não foi possível concluir o agendamento. Tente novamente."
+        title: VALIDATION_MESSAGES.CONFIRM_ERROR_TITLE,
+        message:
+          error instanceof TypeError
+            ? VALIDATION_MESSAGES.CONNECTION_ERROR
+            : VALIDATION_MESSAGES.GENERIC_ERROR,
       });
       setError(
         error instanceof TypeError
-          ? "A conexão foi interrompida. Verifique sua internet e tente novamente."
-          : "Não foi possível concluir o agendamento. Tente novamente."
+          ? VALIDATION_MESSAGES.CONNECTION_ERROR
+          : VALIDATION_MESSAGES.GENERIC_ERROR,
       );
       setLoading(false);
       return;
     } finally {
-      schedulingInFlightRef.current = false;
+      appointmentInFlightRef.current = false;
     }
 
     setFormData({
-      nome: "",
-      telefone: "",
-      servico: "",
-      data: "",
-      horario: "",
+      customerName: "",
+      customerPhone: "",
+      serviceName: "",
+      date: "",
+      time: "",
     });
 
     setLoading(false);
@@ -468,42 +599,30 @@ function App() {
 
   useEffect(() => {
     if (menuOpen || reviewModalOpen || statusModal || refreshingAgenda) {
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflow = "hidden";
     } else {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
     }
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
     };
   }, [menuOpen, reviewModalOpen, statusModal, refreshingAgenda]);
 
   useEffect(() => {
     if (!error) return;
-
-    const errorTimer = window.setTimeout(() => {
-      setError(null);
-    }, 5000);
-
+    const errorTimer = window.setTimeout(() => setError(null), 5000);
     return () => window.clearTimeout(errorTimer);
   }, [error]);
 
   useEffect(() => {
     if (!successMessage) return;
-
-    const successTimer = window.setTimeout(() => {
-      setSuccessMessage("");
-    }, 3000);
-
+    const successTimer = window.setTimeout(() => setSuccessMessage(""), 3000);
     return () => window.clearTimeout(successTimer);
   }, [successMessage]);
 
   useEffect(() => {
     if (statusModal?.type !== "success") return;
-
-    const closeTimer = window.setTimeout(() => {
-      setStatusModal(null);
-    }, 4000);
-
+    const closeTimer = window.setTimeout(() => setStatusModal(null), 4000);
     return () => window.clearTimeout(closeTimer);
   }, [statusModal]);
 
@@ -534,8 +653,8 @@ function App() {
           className="fixed inset-0 z-[85] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="refresh-agenda-title"
-          aria-describedby="refresh-agenda-description"
+          aria-labelledby="refresh-schedule-title"
+          aria-describedby="refresh-schedule-description"
         >
           <div className="w-full max-w-sm rounded-2xl border border-zinc-700 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7 text-center shadow-2xl shadow-black/70">
             <div className="relative mx-auto mb-5 flex h-16 w-16 items-center justify-center">
@@ -543,13 +662,22 @@ function App() {
               <span className="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-amber-400 border-r-amber-400/60" />
               <RefreshCw className="h-6 w-6 text-amber-300" />
             </div>
-            <h3 id="refresh-agenda-title" className="text-xl font-bold text-white">
+            <h3
+              id="refresh-schedule-title"
+              className="text-xl font-bold text-white"
+            >
               Atualizando horários
             </h3>
-            <p id="refresh-agenda-description" className="mt-2 text-sm leading-6 text-zinc-400">
+            <p
+              id="refresh-schedule-description"
+              className="mt-2 text-sm leading-6 text-zinc-400"
+            >
               Aguarde enquanto buscamos os horários ocupados mais recentes.
             </p>
-            <div className="mt-5 flex items-center justify-center gap-1.5" aria-hidden="true">
+            <div
+              className="mt-5 flex items-center justify-center gap-1.5"
+              aria-hidden="true"
+            >
               {[0, 1, 2].map((item) => (
                 <span
                   key={item}
@@ -562,27 +690,31 @@ function App() {
         </div>
       )}
 
-      <SchedulingModals
+      <AppointmentModals
         reviewOpen={reviewModalOpen}
         status={statusModal}
         appointment={formData}
         selectedService={selectedService}
         loading={loading}
         onCloseReview={() => setReviewModalOpen(false)}
-        onConfirm={confirmarAgendamento}
+        onConfirm={confirmAppointment}
         onCloseStatus={() => setStatusModal(null)}
       />
 
-      <div className={`transition-all duration-300 ${menuOpen ? 'blur-sm opacity-80' : 'blur-0 opacity-100'}`}>
+      <div
+        className={`transition-all duration-300 ${menuOpen ? "blur-sm opacity-80" : "blur-0 opacity-100"}`}
+      >
         <HomeHero
           menuOpen={menuOpen}
-          dataAtual={dataAtual}
-          horaAtual={horaAtual}
+          currentDate={currentDate}
+          currentTime={currentTime}
           onToggleMenu={() => setMenuOpen(!menuOpen)}
         />
         <ServicesSection
-          services={servicos}
-          onSelect={(service) => setFormData({ ...formData, servico: service.nome })}
+          services={services}
+          onSelect={(service) =>
+            setFormData({ ...formData, serviceName: service.name })
+          }
         />
 
         <section id="booking" className="py-20 bg-black">
@@ -592,9 +724,12 @@ function App() {
                 <Calendar className="h-4 w-4" />
                 Agendamento online
               </span>
-              <h2 className="mt-5 text-4xl font-bold tracking-tight sm:text-5xl">Agende seu horário</h2>
+              <h2 className="mt-5 text-4xl font-bold tracking-tight sm:text-5xl">
+                Agende seu horário
+              </h2>
               <p className="mt-4 text-sm leading-6 text-zinc-400 sm:text-base">
-                Escolha o serviço, a melhor data e confirme seus dados em poucos passos.
+                Escolha o serviço, a melhor data e confirme seus dados em poucos
+                passos.
               </p>
             </div>
 
@@ -603,11 +738,13 @@ function App() {
                 <div className="mb-7 rounded-xl border border-amber-500/25 bg-amber-500/[0.08] p-4">
                   <p className="text-amber-200 text-sm font-semibold">
                     <IconBrandMessenger className="inline-block mr-1" />
-                    Horário de Funcionamento: de segunda a sábado.
-                    Agendamentos disponíveis das 08:00 às 19:00, com intervalo para almoço das 12:00 às 13:00.
+                    Horário de Funcionamento: de segunda a sábado. Agendamentos
+                    disponíveis das 08:00 às 19:00, com intervalo para almoço
+                    das 12:00 às 13:00.
                   </p>
                   <p className="text-zinc-300 text-xs mt-1">
-                    Caso não veja horários disponíveis, tente novamente após esse horário ou entre em contato via WhatsApp.
+                    Caso não veja horários disponíveis, tente novamente após
+                    esse horário ou entre em contato via WhatsApp.
                   </p>
                 </div>
 
@@ -621,9 +758,15 @@ function App() {
                 )}
 
                 {error && (
-                  <div className="mb-6 rounded-xl border border-red-500/40 bg-red-500/10 p-4" role="alert">
+                  <div
+                    className="mb-6 rounded-xl border border-red-500/40 bg-red-500/10 p-4"
+                    role="alert"
+                  >
                     <p className="flex items-start gap-2 text-sm font-semibold text-red-300">
-                      <IconAlertSquareRounded className="mt-0.5 shrink-0" size={18} />
+                      <IconAlertSquareRounded
+                        className="mt-0.5 shrink-0"
+                        size={18}
+                      />
                       {error}
                     </p>
                   </div>
@@ -631,144 +774,244 @@ function App() {
 
                 <form onSubmit={handleSubmit} className="space-y-6" noValidate>
                   <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-zinc-200" htmlFor="nome">Nome completo</label>
+                    <label
+                      className="block text-sm font-semibold text-zinc-200"
+                      htmlFor="customerName"
+                    >
+                      Nome completo
+                    </label>
                     <div className="group relative">
-                      <IconUserFilled className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 transition group-focus-within:text-amber-300" size={19} />
+                      <IconUserFilled
+                        className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 transition group-focus-within:text-amber-300"
+                        size={19}
+                      />
                       <input
-                        id="nome"
+                        id="customerName"
                         type="text"
-                        name="nome"
-                        value={formData.nome}
+                        name="customerName"
+                        value={formData.customerName}
                         onChange={handleChange}
                         onBlur={handleBlur}
-                        className={`${getFieldClass("nome")} pl-11`}
+                        className={`${getFieldClass("customerName")} pl-11`}
                         placeholder="Ex: João Silva"
                         autoComplete="name"
                         maxLength={80}
-                        aria-invalid={Boolean(fieldErrors.nome)}
-                        aria-describedby={fieldErrors.nome ? "nome-error" : undefined}
+                        aria-invalid={Boolean(fieldErrors.customerName)}
+                        aria-describedby={
+                          fieldErrors.customerName
+                            ? "customerName-error"
+                            : undefined
+                        }
                         required
                       />
                     </div>
-                    {fieldErrors.nome && <p id="nome-error" role="alert" className="text-xs font-medium text-red-300">{fieldErrors.nome}</p>}
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-zinc-200" htmlFor="telefone">Telefone</label>
-                    <div className="group relative">
-                      <IconPhone className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 transition group-focus-within:text-amber-300" size={20} />
-                      <input
-                        id="telefone"
-                        type="tel"
-                        name="telefone"
-                        value={formData.telefone}
-                        onChange={handleChange}
-                        onBlur={handleBlur}
-                        className={`${getFieldClass("telefone")} pl-11`}
-                        placeholder="(27) 91234-5678"
-                        inputMode="tel"
-                        autoComplete="tel"
-                        maxLength={15}
-                        aria-invalid={Boolean(fieldErrors.telefone)}
-                        aria-describedby={fieldErrors.telefone ? "telefone-error" : "telefone-hint"}
-                        required
-                      />
-                    </div>
-                    {fieldErrors.telefone ? (
-                      <p id="telefone-error" role="alert" className="text-xs font-medium text-red-300">{fieldErrors.telefone}</p>
-                    ) : (
-                      <p id="telefone-hint" className="text-xs text-zinc-500">Informe o DDD e o número do WhatsApp.</p>
+                    {fieldErrors.customerName && (
+                      <p
+                        id="customerName-error"
+                        role="alert"
+                        className="text-xs font-medium text-red-300"
+                      >
+                        {fieldErrors.customerName}
+                      </p>
                     )}
                   </div>
 
                   <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-zinc-200" htmlFor="servico">Serviço</label>
+                    <label
+                      className="block text-sm font-semibold text-zinc-200"
+                      htmlFor="customerPhone"
+                    >
+                      Telefone
+                    </label>
+                    <div className="group relative">
+                      <IconPhone
+                        className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 transition group-focus-within:text-amber-300"
+                        size={20}
+                      />
+                      <input
+                        id="customerPhone"
+                        type="tel"
+                        name="customerPhone"
+                        value={formData.customerPhone}
+                        onChange={handleChange}
+                        onBlur={handleBlur}
+                        className={`${getFieldClass("customerPhone")} pl-11`}
+                        placeholder="(27) 91234-5678"
+                        inputMode="tel"
+                        autoComplete="tel"
+                        maxLength={15}
+                        aria-invalid={Boolean(fieldErrors.customerPhone)}
+                        aria-describedby={
+                          fieldErrors.customerPhone
+                            ? "customerPhone-error"
+                            : "customerPhone-hint"
+                        }
+                        required
+                      />
+                    </div>
+                    {fieldErrors.customerPhone ? (
+                      <p
+                        id="customerPhone-error"
+                        role="alert"
+                        className="text-xs font-medium text-red-300"
+                      >
+                        {fieldErrors.customerPhone}
+                      </p>
+                    ) : (
+                      <p
+                        id="customerPhone-hint"
+                        className="text-xs text-zinc-500"
+                      >
+                        Informe o DDD e o número do WhatsApp.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label
+                      className="block text-sm font-semibold text-zinc-200"
+                      htmlFor="serviceName"
+                    >
+                      Serviço
+                    </label>
                     <div className="group relative">
                       <Scissors className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-500 transition group-focus-within:text-amber-300" />
                       <select
-                        id="servico"
-                        name="servico"
-                        value={formData.servico}
+                        id="serviceName"
+                        name="serviceName"
+                        value={formData.serviceName}
                         onChange={handleChange}
                         onBlur={handleBlur}
-                        className={`${getFieldClass("servico")} appearance-none pl-11 pr-11`}
-                        aria-invalid={Boolean(fieldErrors.servico)}
-                        aria-describedby={fieldErrors.servico ? "servico-error" : "servico-hint"}
+                        className={`${getFieldClass("serviceName")} appearance-none pl-11 pr-11`}
+                        aria-invalid={Boolean(fieldErrors.serviceName)}
+                        aria-describedby={
+                          fieldErrors.serviceName
+                            ? "serviceName-error"
+                            : "serviceName-hint"
+                        }
                         required
                       >
                         <option value="">Selecione o serviço</option>
-                        {servicos.map((s) => (
-                          <option key={s._id || s.nome} value={s.nome}>{s.nome}</option>
+                        {services.map((s) => (
+                          <option key={s._id || s.name} value={s.name}>
+                            {s.name}
+                          </option>
                         ))}
                       </select>
                       <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-500 transition group-focus-within:text-amber-300" />
                     </div>
-                    {fieldErrors.servico ? (
-                      <p id="servico-error" role="alert" className="text-xs font-medium text-red-300">{fieldErrors.servico}</p>
+                    {fieldErrors.serviceName ? (
+                      <p
+                        id="serviceName-error"
+                        role="alert"
+                        className="text-xs font-medium text-red-300"
+                      >
+                        {fieldErrors.serviceName}
+                      </p>
                     ) : selectedService ? (
-                      <p id="servico-hint" className="flex items-center gap-2 text-xs text-amber-300">
-                        <span className="font-bold">R$ {selectedService.preco.toFixed(2)}</span>
+                      <p
+                        id="serviceName-hint"
+                        className="flex items-center gap-2 text-xs text-amber-300"
+                      >
+                        <span className="font-bold">
+                          R$ {selectedService.price.toFixed(2)}
+                        </span>
                         <span className="h-1 w-1 rounded-full bg-zinc-600" />
-                        {selectedService.duracao}
+                        {selectedService.duration}
                       </p>
                     ) : null}
                   </div>
 
                   <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-zinc-200" htmlFor="data">Data do agendamento</label>
+                    <label
+                      className="block text-sm font-semibold text-zinc-200"
+                      htmlFor="date"
+                    >
+                      Data do agendamento
+                    </label>
                     <PublicDatePicker
-                      value={formData.data}
-                      min={getDataMinima()}
-                      max={getDataMaxima()}
-                      invalid={Boolean(fieldErrors.data)}
-                      describedBy={fieldErrors.data ? "data-error" : "data-hint"}
+                      value={formData.date}
+                      min={getMinDate()}
+                      max={getMaxDate()}
+                      invalid={Boolean(fieldErrors.date)}
+                      describedBy={
+                        fieldErrors.date ? "date-error" : "date-hint"
+                      }
                       onChange={handleDateChange}
                     />
-                    {fieldErrors.data ? (
-                      <p id="data-error" role="alert" className="text-xs font-medium text-red-300">{fieldErrors.data}</p>
-                    ) : formData.data ? (
-                      <p id="data-hint" className="text-xs text-amber-300">
-                        {formatDisplayDate(formData.data)}
-                        {isHoje(formData.data) && " (Hoje)"}
-                        {isAmanha(formData.data) && " (Amanhã)"}
+                    {fieldErrors.date ? (
+                      <p
+                        id="date-error"
+                        role="alert"
+                        className="text-xs font-medium text-red-300"
+                      >
+                        {fieldErrors.date}
+                      </p>
+                    ) : formData.date ? (
+                      <p id="date-hint" className="text-xs text-amber-300">
+                        {formatDisplayDate(formData.date)}
+                        {isToday(formData.date) && " (Hoje)"}
+                        {isTomorrow(formData.date) && " (Amanhã)"}
                       </p>
                     ) : (
-                      <p id="data-hint" className="text-xs text-zinc-500">Você pode agendar com até 30 dias de antecedência.</p>
+                      <p id="date-hint" className="text-xs text-zinc-500">
+                        Você pode agendar com até 30 dias de antecedência.
+                      </p>
                     )}
                   </div>
 
                   <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-zinc-200" htmlFor="horario">Horário disponível</label>
+                    <label
+                      className="block text-sm font-semibold text-zinc-200"
+                      htmlFor="time"
+                    >
+                      Horário disponível
+                    </label>
                     <div className="group relative">
-                      <IconAlarm className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 transition group-focus-within:text-amber-300" size={20} />
+                      <IconAlarm
+                        className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 transition group-focus-within:text-amber-300"
+                        size={20}
+                      />
                       <select
-                        id="horario"
-                        name="horario"
-                        value={formData.horario}
+                        id="time"
+                        name="time"
+                        value={formData.time}
                         onChange={handleChange}
                         onBlur={handleBlur}
-                        className={`${getFieldClass("horario")} appearance-none pl-11 pr-11`}
-                        aria-invalid={Boolean(fieldErrors.horario)}
-                        aria-describedby={fieldErrors.horario ? "horario-error" : "horario-hint"}
+                        className={`${getFieldClass("time")} appearance-none pl-11 pr-11`}
+                        aria-invalid={Boolean(fieldErrors.time)}
+                        aria-describedby={
+                          fieldErrors.time ? "time-error" : "time-hint"
+                        }
                         required
                       >
                         <option value="">Selecione um horário</option>
-                        {horariosFiltrados.length === 0 ? (
-                          <option disabled>Nenhum horário disponível para esta data</option>
+                        {filteredTimes.length === 0 ? (
+                          <option disabled>
+                            Nenhum horário disponível para esta data
+                          </option>
                         ) : (
-                          horariosFiltrados.map((h) => (
-                            <option key={h} value={h}>{h}</option>
+                          filteredTimes.map((time) => (
+                            <option key={time} value={time}>
+                              {time}
+                            </option>
                           ))
                         )}
                       </select>
                       <ChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-500 transition group-focus-within:text-amber-300" />
                     </div>
-                    {fieldErrors.horario ? (
-                      <p id="horario-error" role="alert" className="text-xs font-medium text-red-300">{fieldErrors.horario}</p>
+                    {fieldErrors.time ? (
+                      <p
+                        id="time-error"
+                        role="alert"
+                        className="text-xs font-medium text-red-300"
+                      >
+                        {fieldErrors.time}
+                      </p>
                     ) : (
-                      <p id="horario-hint" className="text-xs text-zinc-500">
-                        {formData.data
-                          ? `${horariosFiltrados.length} horário(s) disponível(is)`
+                      <p id="time-hint" className="text-xs text-zinc-500">
+                        {formData.date
+                          ? `${filteredTimes.length} horário(s) disponível(is)`
                           : "Escolha uma data para consultar os horários."}
                       </p>
                     )}
@@ -799,10 +1042,10 @@ function App() {
               </div>
 
               <AvailabilityPanel
-                today={getAgendamentosPorData(getDataAtual())}
-                tomorrow={getAgendamentosPorData(getDataAmanha())}
+                today={getAppointmentsByDate(getCurrentDate())}
+                tomorrow={getAppointmentsByDate(getTomorrowDate())}
                 refreshing={refreshingAgenda}
-                onRefresh={atualizarAgendaManual}
+                onRefresh={refreshAgendaManually}
               />
             </div>
           </div>

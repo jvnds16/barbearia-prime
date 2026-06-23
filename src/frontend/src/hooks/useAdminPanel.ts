@@ -1,9 +1,9 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { authService } from "../services/authService";
-import { schedulingService } from "../services/schedulingService";
+import { appointmentService } from "../services/appointmentService";
 import { defaultServices, listServices } from "../services/serviceCatalog";
 import { ApiError } from "../services/api";
-import { Agendamento, DashboardStats, Servico } from "../types/scheduling";
+import { Appointment, DashboardStats, Service } from "../types/appointment";
 import { calculateDashboardStats } from "../utils/dashboard";
 import { toDateValue } from "../utils/date";
 
@@ -13,48 +13,84 @@ export type AdminMessage = {
 } | null;
 
 export type EditErrors = Partial<
-  Record<"nome" | "telefone" | "servico" | "preco" | "data" | "horario", string>
+  Record<
+    | "customerName"
+    | "customerPhone"
+    | "serviceName"
+    | "price"
+    | "date"
+    | "time",
+    string
+  >
 >;
 
 const initialDashboardStats: DashboardStats = {
-  lucroHoje: 0,
-  lucroMensal: 0,
-  totalAgendamentos: 0,
-  mediaDiaria: 0,
-  agendamentosHoje: 0,
-  agendamentosMes: 0,
-  atendimentosHoje: 0,
-  atendimentosMes: 0,
-  pendentesMes: 0,
-  ausentesMes: 0,
-  lucrosPorDia: {},
-  servicosMaisPopulares: []
+  todayProfit: 0,
+  monthlyProfit: 0,
+  totalAppointments: 0,
+  dailyAverage: 0,
+  todayAppointments: 0,
+  monthlyAppointments: 0,
+  todayAttendances: 0,
+  monthlyAttendances: 0,
+  monthlyPending: 0,
+  monthlyAbsent: 0,
+  dailyProfits: {},
+  mostPopularServices: [],
 };
 
+// Mensagens em português
+const MESSAGES = {
+  SESSION_EXPIRED: "Sua sessão expirou. Entre novamente.",
+  UNABLE_TO_UPDATE: "Não foi possível atualizar os dados do painel.",
+  PASSWORD_REQUIRED: "Informe a senha de administrador para entrar.",
+  UNABLE_TO_LOGIN: "Não foi possível entrar.",
+  NAME_VALIDATION: "Informe nome e sobrenome.",
+  PHONE_VALIDATION: "Telefone inválido com DDD.",
+  SERVICE_VALIDATION: "Selecione um serviço válido.",
+  PRICE_VALIDATION: "Informe um preço válido.",
+  DATE_VALIDATION: "Escolha uma data.",
+  DATE_RANGE_VALIDATION: "Escolha uma data entre hoje e os próximos 30 dias.",
+  TIME_VALIDATION: "Escolha um horário válido.",
+  FORM_ERROR: "Revise os campos destacados antes de salvar.",
+  UPDATE_SUCCESS: "Agendamento atualizado com sucesso.",
+  UPDATE_ERROR: "Não foi possível atualizar o agendamento.",
+  CANCEL_SUCCESS: "Agendamento cancelado com sucesso.",
+  CANCEL_ERROR: "Não foi possível excluir o agendamento.",
+} as const;
+
 export function useAdminPanel() {
-  const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<Agendamento | null>(null);
+  const [editForm, setEditForm] = useState<Appointment | null>(null);
   const [filterDate, setFilterDate] = useState(() => toDateValue(new Date()));
   const [clearingFilter, setClearingFilter] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<AdminMessage>(null);
-  const [deleteTarget, setDeleteTarget] = useState<Agendamento | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Appointment | null>(null);
   const [editErrors, setEditErrors] = useState<EditErrors>({});
-  const [servicos, setServicos] = useState<Servico[]>(defaultServices);
-  const [activeTab, setActiveTab] = useState<"agendamentos" | "dashboard">("dashboard");
-  const [dashboardStats, setDashboardStats] = useState<DashboardStats>(initialDashboardStats);
+  const [services, setServices] = useState<Service[]>(defaultServices);
+  const [activeTab, setActiveTab] = useState<"appointments" | "dashboard">(
+    "dashboard",
+  );
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats>(
+    initialDashboardStats,
+  );
   const loadingAppointmentsRef = useRef(false);
 
   const today = new Date();
-  const dataHoje = toDateValue(today);
-  const editLimit = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 30);
-  const dataLimiteEdicao = toDateValue(editLimit);
-  const horariosPermitidos = Array.from({ length: 23 }, (_, index) => {
+  const todayDate = toDateValue(today);
+  const editLimit = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate() + 30,
+  );
+  const editLimitDate = toDateValue(editLimit);
+  const allowedTimes = Array.from({ length: 23 }, (_, index) => {
     const totalMinutes = 8 * 60 + index * 30;
     const hour = Math.floor(totalMinutes / 60);
     const minute = totalMinutes % 60;
@@ -72,7 +108,8 @@ export function useAdminPanel() {
   }, [message]);
 
   useEffect(() => {
-    authService.getSession()
+    authService
+      .getSession()
       .then(() => setIsAuthenticated(true))
       .catch(() => authService.logout())
       .finally(() => setCheckingAuth(false));
@@ -81,24 +118,24 @@ export function useAdminPanel() {
   useEffect(() => {
     listServices()
       .then((result) => {
-        if (result.success && result.data.length) setServicos(result.data);
+        if (result.success && result.data.length) setServices(result.data);
       })
-      .catch(() => setServicos(defaultServices));
+      .catch(() => setServices(defaultServices));
   }, []);
 
-  const loadAgendamentos = async (silent = false) => {
+  const loadAppointments = async (silent = false) => {
     if (loadingAppointmentsRef.current) return;
 
     loadingAppointmentsRef.current = true;
     if (!silent) setLoading(true);
 
     try {
-      const { data, success } = await schedulingService.listAdmin();
+      const { data, success } = await appointmentService.listAdmin();
       if (success) {
-        setAgendamentos(data);
+        setAppointments(data);
         setDashboardStats(calculateDashboardStats(data));
         setMessage((current) =>
-          current?.text === "Não foi possível atualizar os dados do painel." ? null : current
+          current?.text === MESSAGES.UNABLE_TO_UPDATE ? null : current,
         );
       }
     } catch (error) {
@@ -106,11 +143,11 @@ export function useAdminPanel() {
       if (error instanceof ApiError && error.status === 401) {
         authService.logout();
         setIsAuthenticated(false);
-        setMessage({ type: "error", text: "Sua sessão expirou. Entre novamente." });
+        setMessage({ type: "error", text: MESSAGES.SESSION_EXPIRED });
         return;
       }
       if (!silent) {
-        setMessage({ type: "error", text: "Não foi possível atualizar os dados do painel." });
+        setMessage({ type: "error", text: MESSAGES.UNABLE_TO_UPDATE });
       }
     } finally {
       loadingAppointmentsRef.current = false;
@@ -121,15 +158,18 @@ export function useAdminPanel() {
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    void loadAgendamentos();
-    const interval = window.setInterval(() => void loadAgendamentos(true), 30000);
+    void loadAppointments();
+    const interval = window.setInterval(
+      () => void loadAppointments(true),
+      30000,
+    );
     return () => window.clearInterval(interval);
   }, [isAuthenticated]);
 
   const handleLogin = async (event: FormEvent) => {
     event.preventDefault();
     if (!password.trim()) {
-      setMessage({ type: "error", text: "Informe a senha de administrador para entrar." });
+      setMessage({ type: "error", text: MESSAGES.PASSWORD_REQUIRED });
       return;
     }
 
@@ -137,7 +177,7 @@ export function useAdminPanel() {
     try {
       await Promise.all([
         authService.login(password),
-        new Promise((resolve) => window.setTimeout(resolve, 700))
+        new Promise((resolve) => window.setTimeout(resolve, 700)),
       ]);
       setIsAuthenticated(true);
       setPassword("");
@@ -145,7 +185,7 @@ export function useAdminPanel() {
     } catch (error) {
       setMessage({
         type: "error",
-        text: error instanceof Error ? error.message : "Não foi possível entrar."
+        text: error instanceof Error ? error.message : MESSAGES.UNABLE_TO_LOGIN,
       });
     } finally {
       setLoading(false);
@@ -159,7 +199,7 @@ export function useAdminPanel() {
     setEditForm(null);
   };
 
-  const handleEdit = (appointment: Agendamento) => {
+  const handleEdit = (appointment: Appointment) => {
     if (!appointment._id) return;
 
     setEditingId(appointment._id);
@@ -167,8 +207,8 @@ export function useAdminPanel() {
     setEditErrors({});
     setMessage(null);
     if (activeTab === "dashboard") {
-      setFilterDate(appointment.data);
-      setActiveTab("agendamentos");
+      setFilterDate(appointment.date);
+      setActiveTab("appointments");
     }
   };
 
@@ -183,20 +223,30 @@ export function useAdminPanel() {
     if (!editForm) return false;
 
     const nextErrors: EditErrors = {};
-    const name = editForm.nome.trim().replace(/\s+/g, " ");
-    const phone = editForm.telefone.replace(/\D/g, "");
-    const original = agendamentos.find((appointment) => appointment._id === editingId);
+    const name = editForm.customerName.trim().replace(/\s+/g, " ");
+    const phone = editForm.customerPhone.replace(/\D/g, "");
+    const original = appointments.find(
+      (appointment) => appointment._id === editingId,
+    );
 
-    if (name.length < 3 || name.split(" ").length < 2) nextErrors.nome = "Informe nome e sobrenome.";
-    if (!/^[1-9]{2}(?:[2-8]|9[1-9])[0-9]{7,8}$/.test(phone)) nextErrors.telefone = "Telefone inválido com DDD.";
-    if (!servicos.some((service) => service.nome === editForm.servico)) nextErrors.servico = "Selecione um serviço válido.";
-    if (!editForm.preco || editForm.preco < 0) nextErrors.preco = "Informe um preço válido.";
-    if (!editForm.data) {
-      nextErrors.data = "Escolha uma data.";
-    } else if (editForm.data !== original?.data && (editForm.data < dataHoje || editForm.data > dataLimiteEdicao)) {
-      nextErrors.data = "Escolha uma data entre hoje e os próximos 30 dias.";
+    if (name.length < 3 || name.split(" ").length < 2)
+      nextErrors.customerName = MESSAGES.NAME_VALIDATION;
+    if (!/^[1-9]{2}(?:[2-8]|9[1-9])[0-9]{7,8}$/.test(phone))
+      nextErrors.customerPhone = MESSAGES.PHONE_VALIDATION;
+    if (!services.some((service) => service.name === editForm.serviceName))
+      nextErrors.serviceName = MESSAGES.SERVICE_VALIDATION;
+    if (!editForm.price || editForm.price < 0)
+      nextErrors.price = MESSAGES.PRICE_VALIDATION;
+    if (!editForm.date) {
+      nextErrors.date = MESSAGES.DATE_VALIDATION;
+    } else if (
+      editForm.date !== original?.date &&
+      (editForm.date < todayDate || editForm.date > editLimitDate)
+    ) {
+      nextErrors.date = MESSAGES.DATE_RANGE_VALIDATION;
     }
-    if (!horariosPermitidos.includes(editForm.horario)) nextErrors.horario = "Escolha um horário válido.";
+    if (!allowedTimes.includes(editForm.time))
+      nextErrors.time = MESSAGES.TIME_VALIDATION;
 
     setEditErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -205,7 +255,7 @@ export function useAdminPanel() {
   const handleSave = async () => {
     if (!editForm || !editingId) return;
     if (!validateEditForm()) {
-      setMessage({ type: "error", text: "Revise os campos destacados antes de salvar." });
+      setMessage({ type: "error", text: MESSAGES.FORM_ERROR });
       return;
     }
 
@@ -213,23 +263,23 @@ export function useAdminPanel() {
     try {
       const updateData = { ...editForm };
       delete updateData._id;
-      const result = await schedulingService.update(editingId, updateData);
+      const result = await appointmentService.update(editingId, updateData);
       if (!result.success) throw new Error(result.error || "Erro desconhecido");
 
-      const updated = agendamentos.map((appointment) =>
-        appointment._id === editingId ? { ...result.data } : appointment
+      const updated = appointments.map((appointment) =>
+        appointment._id === editingId ? { ...result.data } : appointment,
       );
-      setAgendamentos(updated);
+      setAppointments(updated);
       setDashboardStats(calculateDashboardStats(updated));
       setEditingId(null);
       setEditForm(null);
       setEditErrors({});
-      setMessage({ type: "success", text: "Agendamento atualizado com sucesso." });
+      setMessage({ type: "success", text: MESSAGES.UPDATE_SUCCESS });
     } catch (error) {
       console.error("Erro ao atualizar agendamento:", error);
       setMessage({
         type: "error",
-        text: error instanceof Error ? error.message : "Não foi possível atualizar o agendamento."
+        text: error instanceof Error ? error.message : MESSAGES.UPDATE_ERROR,
       });
     } finally {
       setLoading(false);
@@ -239,37 +289,41 @@ export function useAdminPanel() {
   const handleDelete = async (id: string) => {
     setLoading(true);
     try {
-      const result = await schedulingService.remove(id);
+      const result = await appointmentService.remove(id);
       if (!result.success) throw new Error(result.error || "Erro desconhecido");
 
-      const updated = agendamentos.map((appointment) =>
-        appointment._id === id ? result.data : appointment
+      const updated = appointments.map((appointment) =>
+        appointment._id === id ? result.data : appointment,
       );
-      setAgendamentos(updated);
+      setAppointments(updated);
       setDashboardStats(calculateDashboardStats(updated));
       setDeleteTarget(null);
-      setMessage({ type: "success", text: "Agendamento cancelado com sucesso." });
+      setMessage({ type: "success", text: MESSAGES.CANCEL_SUCCESS });
     } catch (error) {
       console.error("Erro ao excluir agendamento:", error);
       setMessage({
         type: "error",
-        text: error instanceof Error ? error.message : "Não foi possível excluir o agendamento."
+        text: error instanceof Error ? error.message : MESSAGES.CANCEL_ERROR,
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleEditChange = (field: keyof Agendamento, value: string | number) => {
+  const handleEditChange = (
+    field: keyof Appointment,
+    value: string | number,
+  ) => {
     if (!editForm || field === "_id") return;
 
-    const selectedService = field === "servico"
-      ? servicos.find((service) => service.nome === value)
-      : undefined;
+    const selectedService =
+      field === "serviceName"
+        ? services.find((service) => service.name === value)
+        : undefined;
     setEditForm({
       ...editForm,
       [field]: value,
-      ...(selectedService ? { preco: selectedService.preco } : {})
+      ...(selectedService ? { price: selectedService.price } : {}),
     });
     setEditErrors((current) => {
       const next = { ...current };
@@ -284,44 +338,48 @@ export function useAdminPanel() {
     setEditErrors({});
   };
 
-  const agendamentosFiltrados = filterDate
-    ? agendamentos.filter((appointment) => appointment.data === filterDate)
-    : agendamentos;
-  const agendamentosOrdenados = [...agendamentosFiltrados].sort((first, second) =>
-    first.data !== second.data
-      ? first.data.localeCompare(second.data)
-      : first.horario.localeCompare(second.horario)
+  const filteredAppointments = filterDate
+    ? appointments.filter((appointment) => appointment.date === filterDate)
+    : appointments;
+  const sortedAppointments = [...filteredAppointments].sort((first, second) =>
+    first.date !== second.date
+      ? first.date.localeCompare(second.date)
+      : first.time.localeCompare(second.time),
   );
-  const agendamentosRecentes = [...agendamentos]
+  const recentAppointments = [...appointments]
     .sort((first, second) => {
-      if (first.timestamp !== second.timestamp) return (second.timestamp || 0) - (first.timestamp || 0);
-      if (first.data !== second.data) return second.data.localeCompare(first.data);
-      return second.horario.localeCompare(first.horario);
+      if (first.timestamp !== second.timestamp)
+        return (second.timestamp || 0) - (first.timestamp || 0);
+      if (first.date !== second.date)
+        return second.date.localeCompare(first.date);
+      return second.time.localeCompare(first.time);
     })
     .slice(0, 5);
-  const dataMinimaFiltro = agendamentos.reduce(
-    (earliest, appointment) => appointment.data < earliest ? appointment.data : earliest,
-    `${today.getFullYear() - 5}-01-01`
+  const minFilterDate = appointments.reduce(
+    (earliest, appointment) =>
+      appointment.date < earliest ? appointment.date : earliest,
+    `${today.getFullYear() - 5}-01-01`,
   );
-  const dataMaximaFiltro = agendamentos.reduce(
-    (latest, appointment) => appointment.data > latest ? appointment.data : latest,
-    `${today.getFullYear() + 1}-12-31`
+  const maxFilterDate = appointments.reduce(
+    (latest, appointment) =>
+      appointment.date > latest ? appointment.date : latest,
+    `${today.getFullYear() + 1}-12-31`,
   );
 
   return {
     activeTab,
-    agendamentos,
-    agendamentosFiltrados,
-    agendamentosOrdenados,
-    agendamentosRecentes,
+    appointments,
+    filteredAppointments,
+    sortedAppointments,
+    recentAppointments,
     cancelEdit,
     checkingAuth,
     clearingFilter,
     dashboardStats,
-    dataHoje,
-    dataLimiteEdicao,
-    dataMaximaFiltro,
-    dataMinimaFiltro,
+    todayDate,
+    editLimitDate,
+    maxFilterDate,
+    minFilterDate,
     deleteTarget,
     editErrors,
     editForm,
@@ -334,18 +392,18 @@ export function useAdminPanel() {
     handleLogin,
     handleLogout,
     handleSave,
-    horariosPermitidos,
+    allowedTimes,
     isAuthenticated,
     loading,
     message,
     password,
-    servicos,
+    services,
     setActiveTab,
     setDeleteTarget,
     setFilterDate,
     setMessage,
     setPassword,
     setShowPassword,
-    showPassword
+    showPassword,
   };
 }

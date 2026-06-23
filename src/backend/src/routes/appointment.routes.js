@@ -4,10 +4,11 @@ import {
   deleteAppointment,
   listAppointments,
   listAvailableSlots,
+  listPublicAppointments,
   updateAppointment
 } from "../controllers/appointment.controller.js";
 import { requireAuth } from "../middlewares/authMiddleware.js";
-import { schedulingLimiter } from "../middlewares/rateLimiters.js";
+import { appointmentLimiter } from "../middlewares/rateLimiters.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { validateRequest } from "../middlewares/validateRequest.js";
 import {
@@ -15,7 +16,8 @@ import {
   appointmentListQuerySchema,
   appointmentUpdateSchema,
   availabilityQuerySchema,
-  objectIdParamsSchema
+  objectIdParamsSchema,
+  publicAppointmentQuerySchema
 } from "../validation/schemas.js";
 
 export const appointmentRoutes = Router();
@@ -28,9 +30,14 @@ appointmentRoutes.get(
 );
 appointmentRoutes.post(
   "/",
-  schedulingLimiter,
+  appointmentLimiter,
   validateRequest(appointmentCreateSchema),
   asyncHandler(createAppointment)
+);
+appointmentRoutes.get(
+  "/public",
+  validateRequest(publicAppointmentQuerySchema, "query"),
+  asyncHandler(listPublicAppointments)
 );
 appointmentRoutes.get(
   "/available-slots",
