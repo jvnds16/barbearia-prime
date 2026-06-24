@@ -9,6 +9,7 @@ export function calculateDashboardStats(
   const validAppointments = appointments.filter(
     (appointment) => appointment.status !== "cancelled",
   );
+  // Financial metrics count only confirmed attendances.
   const attendedAppointments = appointments.filter(
     (appointment) => appointment.status === "present",
   );
@@ -50,6 +51,7 @@ export function calculateDashboardStats(
     {} as Record<string, number>,
   );
 
+  // Service popularity is calculated from attended appointments to match revenue.
   const services = attendedThisMonth.reduce(
     (result, appointment) => {
       if (!result[appointment.serviceName]) {

@@ -29,10 +29,12 @@ export function clearAuthToken() {
 export async function apiRequest<T>(path: string, options: RequestOptions = {}) {
   const headers = new Headers(options.headers);
 
+  // JSON is the default payload format for this API client.
   if (!headers.has("Content-Type") && options.body) {
     headers.set("Content-Type", "application/json");
   }
 
+  // Authenticated admin calls opt into the bearer token instead of sending it globally.
   if (options.auth) {
     const token = getAuthToken();
     if (token) {
@@ -49,6 +51,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}) 
   const text = await response.text();
   let payload: unknown = null;
 
+  // Read text first so empty responses and malformed JSON can produce stable errors.
   if (text) {
     try {
       payload = JSON.parse(text);
@@ -62,6 +65,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}) 
   }
 
   if (!response.ok) {
+    // Prefer the backend error envelope when it exists.
     const message =
       typeof payload === "object" &&
       payload !== null &&

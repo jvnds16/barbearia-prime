@@ -13,6 +13,7 @@ export function validateRequest(schema, source = "body") {
       return next(error);
     }
 
+    // Controllers receive the parsed and trimmed data instead of raw request input.
     req[source] = result.data;
     return next();
   };

@@ -24,6 +24,7 @@ export const authService = {
       body: JSON.stringify({ password })
     });
 
+    // Store only the short-lived admin token; public booking flows never need it.
     setAuthToken(response.token);
     return response;
   },

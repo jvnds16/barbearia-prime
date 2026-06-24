@@ -8,6 +8,7 @@ function hasFutureLeadTime(time, date) {
   const [hour, minute] = time.split(":").map(Number);
   const slotMinutes = hour * 60 + minute;
 
+  // Hide same-day slots that are too close to the current business time.
   return slotMinutes > businessMinutesNow() + 30;
 }
 
@@ -25,6 +26,7 @@ export async function getAvailableSlots({ date, barber }) {
     .select("time durationMinutes")
     .lean();
 
+  // Compare ranges instead of start times so long services reserve every affected slot.
   return generateAvailableTimeSlots().filter((time) => {
     const [hour, minute] = time.split(":").map(Number);
     const candidateStart = hour * 60 + minute;

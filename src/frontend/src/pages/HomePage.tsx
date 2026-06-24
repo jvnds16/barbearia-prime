@@ -63,7 +63,7 @@ type StatusModal = {
 const STORAGE_KEY = "appointments";
 const STORAGE_TIMESTAMP_KEY = "appointmentsTimestamp";
 
-// Mensagens de validação em português
+// User-facing validation messages remain localized.
 const VALIDATION_MESSAGES = {
   NAME_REQUIRED: "Informe seu nome completo.",
   NAME_MIN_LENGTH: "O nome precisa ter pelo menos 3 caracteres.",
@@ -108,7 +108,7 @@ const VALIDATION_MESSAGES = {
   CONFIRM_ERROR_TITLE: "Não foi possível confirmar",
 } as const;
 
-function App() {
+function HomePage() {
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -153,7 +153,7 @@ function App() {
         }
       } catch (error) {
         console.error(
-          "Erro ao carregar serviços da API, usando alternativa local:",
+          "Could not load services from the API. Using the local fallback.",
           error,
         );
       }
@@ -194,6 +194,7 @@ function App() {
         );
 
         if (isToday(formData.date)) {
+          // Same-day options need the same preparation buffer as the backend.
           const currentT = getCurrentTime();
           const currentMinutes =
             parseInt(currentT.split(":")[0]) * 60 +
@@ -214,6 +215,7 @@ function App() {
   ): string => {
     const cleanedValue = value.trim();
 
+    // Client-side validation mirrors backend rules for faster feedback.
     if (name === "customerName") {
       if (!cleanedValue) return VALIDATION_MESSAGES.NAME_REQUIRED;
       if (cleanedValue.length < 3) return VALIDATION_MESSAGES.NAME_MIN_LENGTH;
@@ -270,6 +272,7 @@ function App() {
       time: validateField("time", formData.time),
     };
 
+    // Re-check cached appointments before opening the review modal.
     const conflict = appointments.find(
       (a: Appointment) =>
         a.status !== "cancelled" &&
@@ -363,6 +366,7 @@ function App() {
 
     try {
       const requestSequence = ++agendaRequestSequenceRef.current;
+      // Pull the selected date again to reduce stale availability before review.
       const result = await appointmentService.list({ date: formData.date });
       const latestAppointments = sanitizePublicAppointments(result.data || []);
       const otherDates = appointments.filter(
@@ -371,6 +375,7 @@ function App() {
       const synchronizedAppointments = [...otherDates, ...latestAppointments];
 
       if (requestSequence === agendaRequestSequenceRef.current) {
+        // Replace only the selected date so other cached days remain available.
         setAppointments(synchronizedAppointments);
         localStorage.setItem(
           STORAGE_KEY,
@@ -396,7 +401,7 @@ function App() {
       }
     } catch (error) {
       console.error(
-        "Não foi possível sincronizar a agenda antes da revisão:",
+        "Could not synchronize appointments before review:",
         error,
       );
       setError(VALIDATION_MESSAGES.SYNC_ERROR);
@@ -499,13 +504,12 @@ function App() {
     appointmentInFlightRef.current = true;
 
     try {
+      // Idempotency protects against duplicate bookings if the user retries.
       const result = await appointmentService.create({
         ...newAppointment,
         timestamp: new Date().getTime(),
         status: "pending",
       });
-      console.log("Resposta do servidor:", result);
-
       const message = encodeURIComponent(
         `*Novo Agendamento Confirmado* 📅\n\n` +
           `👤 Nome: ${formData.customerName}\n` +
@@ -520,6 +524,7 @@ function App() {
 
       const publicAppointment = sanitizePublicAppointments([result.data])[0];
       setAppointments((currentAppointments) => {
+        // Update the local public cache immediately so the new slot disappears.
         const withoutDuplicateTime = currentAppointments.filter(
           (appointment) =>
             appointment.date !== publicAppointment.date ||
@@ -542,12 +547,13 @@ function App() {
 
       void fetchAppointments(true, false);
     } catch (error: unknown) {
-      console.error("Erro ao salvar agendamento:", error);
+      console.error("Could not save appointment:", error);
 
       if (error instanceof ApiError) {
         const isConflict = error.status === 409;
 
         if (isConflict) {
+          // Refresh after conflicts so the user sees the newly occupied slot.
           setFieldErrors((prev) => ({
             ...prev,
             time: VALIDATION_MESSAGES.TIME_TAKEN,
@@ -1058,4 +1064,4 @@ function App() {
   );
 }
 
-export default App;
+export default HomePage;

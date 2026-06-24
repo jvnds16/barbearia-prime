@@ -43,6 +43,7 @@ export async function listPublicAppointments(req, res) {
     .sort({ date: 1, time: 1 })
     .lean();
 
+  // Public availability must always reflect the latest bookings.
   res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   return sendData(res, appointments.map(appointmentToApi));
 }
@@ -61,6 +62,7 @@ export async function createAppointment(req, res) {
   }
 
   if (idempotencyKey) {
+    // Returning the previous result keeps client retries from creating duplicates.
     const existing = await Appointment.findOne({ idempotencyKey }).lean();
     if (existing) {
       return sendMessage(
@@ -103,6 +105,8 @@ export async function createAppointment(req, res) {
   if (!service) {
     throw new HttpError(400, "Invalid or unavailable service.");
   }
+
+  // Service duration expands one booking across every occupied 30-minute slot.
   await ensureNoAppointmentConflict({
     date,
     time,
@@ -112,6 +116,7 @@ export async function createAppointment(req, res) {
 
   let appointment;
   try {
+    // Unique slot keys are the final database-level guard against race conditions.
     appointment = await Appointment.create({
       customerName,
       customerPhone,
@@ -218,6 +223,7 @@ export async function updateAppointment(req, res) {
     updateData.serviceName !== undefined &&
     normalizeText(updateData.serviceName) !== current.serviceName;
 
+  // Only changes that can occupy a slot need conflict validation.
   if (appointmentTimeChanged && !hasRequiredLeadTime(time, date)) {
     throw new HttpError(400, "Choose a time at least 30 minutes in advance.");
   }
@@ -247,6 +253,7 @@ export async function updateAppointment(req, res) {
   const slotKeys = createSlotKeys({ date, time, barber, durationMinutes, status });
   let updateOperation;
 
+  // Cancelled and absent appointments free their slots for new customers.
   if (status === "cancelled") {
     updateOperation = {
       $set: {

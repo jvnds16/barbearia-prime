@@ -12,16 +12,16 @@ async function bootstrap() {
     await seedDefaultServices();
   } catch (error) {
     if (env.nodeEnv === "production") throw error;
-    console.error("Banco de dados indisponível ao iniciar:", error.message);
-    console.error("A API continuará online; as rotas que usam MongoDB retornarão 503 até que a conexão seja corrigida.");
+    console.error("Database unavailable during startup:", error.message);
+    console.error("The API will stay online; MongoDB-backed routes return 503 until the connection is restored.");
   }
 
   const server = app.listen(env.port, () => {
-    console.log(`API Barbearia Prime rodando em http://localhost:${env.port}`);
+    console.log(`Barbearia Prime API running at http://localhost:${env.port}`);
   });
 
   const shutdown = (signal) => {
-    console.log(`${signal} recebido. Encerrando a aplicação...`);
+    console.log(`${signal} received. Shutting down the application...`);
     server.close(async () => {
       await mongoose.disconnect();
       process.exit(0);
@@ -35,6 +35,6 @@ async function bootstrap() {
 }
 
 bootstrap().catch((error) => {
-  console.error("Falha ao iniciar o servidor:", error);
+  console.error("Server startup failed:", error);
   process.exit(1);
 });

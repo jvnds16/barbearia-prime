@@ -44,7 +44,7 @@ const appointmentStatusLabels: Record<
   cancelled: "Cancelado",
 };
 
-function Admin() {
+function AdminPage() {
   const {
     activeTab,
     appointments,
@@ -134,13 +134,13 @@ function Admin() {
       {activeTab === "dashboard" ? (
         /* Dashboard */
         <div className="container mx-auto px-4 pb-6 sm:px-6">
-          {/* Notificação de novo agendamento */}
+          {/* New appointment notification */}
           <div
             className="fixed top-4 right-4 z-50"
             id="notification-container"
           ></div>
 
-          {/* Botão de Adicionar agendamento */}
+          {/* Add appointment button */}
           <div className="mb-6">
             <a
               href="/#booking"
@@ -152,7 +152,7 @@ function Admin() {
             </a>
           </div>
 
-          {/* Cards de Resumo */}
+          {/* Summary cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
             <div className="bg-zinc-900 p-6 rounded-lg border border-amber-500/20 transform transition-all duration-300 hover:scale-105">
               <div className="flex items-center justify-between mb-2">
@@ -208,7 +208,7 @@ function Admin() {
             </div>
           </div>
 
-          {/* Gráfico de Lucros Diários */}
+          {/* Daily profit chart */}
           <div className="bg-zinc-900 rounded-lg p-6 mb-6">
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
               <TrendingUp className="h-5 w-5 text-amber-500" />
@@ -258,7 +258,7 @@ function Admin() {
             )}
           </div>
 
-          {/* Serviços Mais Populares */}
+          {/* Most popular services */}
           <div className="bg-zinc-900 rounded-lg p-6 mb-6">
             <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
               <Scissors className="h-5 w-5 text-amber-500" />
@@ -306,7 +306,7 @@ function Admin() {
             )}
           </div>
 
-          {/* Últimos agendamentos */}
+          {/* Latest appointments */}
           <div className="bg-zinc-900 rounded-lg overflow-hidden">
             <div className="px-6 py-4 border-b border-zinc-700">
               <h2 className="text-xl font-bold">Últimos agendamentos</h2>
@@ -392,7 +392,7 @@ function Admin() {
       ) : (
         /* Appointments */
         <div className="container mx-auto px-6 pb-6">
-          {/* Filtros */}
+          {/* Filters */}
           <div className="bg-zinc-900 p-6 rounded-lg mb-6">
             <h2 className="text-xl font-bold mb-4">Filtros</h2>
             <div className="flex flex-col sm:flex-row gap-4">
@@ -428,7 +428,7 @@ function Admin() {
             </div>
           </div>
 
-          {/* Estatísticas */}
+          {/* Statistics */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
             <div className="bg-zinc-900 p-6 rounded-lg">
               <h3 className="text-lg font-semibold text-white mb-2">
@@ -456,7 +456,7 @@ function Admin() {
             </div>
           </div>
 
-          {/* Lista de agendamentos */}
+          {/* Appointment list */}
           <div className="bg-zinc-900 rounded-lg overflow-hidden">
             <div className="px-6 py-4 border-b border-zinc-700">
               <h2 className="text-xl font-bold">
@@ -753,4 +753,4 @@ function Admin() {
   );
 }
 
-export default Admin;
+export default AdminPage;

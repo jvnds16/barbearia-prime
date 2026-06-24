@@ -2,6 +2,7 @@ function plain(value) {
   return value?.toObject ? value.toObject() : value;
 }
 
+// Serializers define the public API shape and keep private model fields internal.
 export function appointmentToApi(value) {
   const appointment = plain(value);
   if (!appointment) return appointment;

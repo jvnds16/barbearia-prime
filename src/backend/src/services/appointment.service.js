@@ -56,6 +56,7 @@ export function hasRequiredLeadTime(time, date) {
   if (date !== todayISO()) return true;
 
   const [hour, minute] = time.split(":").map(Number);
+  // Same-day bookings need a buffer so the barber can prepare for the customer.
   return hour * 60 + minute > businessMinutesNow() + 30;
 }
 
@@ -68,6 +69,7 @@ export function createSlotKeys({
 }) {
   if (!BLOCKING_APPOINTMENT_STATUSES.includes(status)) return undefined;
 
+  // Each 30-minute segment gets its own key so longer services block overlap.
   const [hour, minute] = time.split(":").map(Number);
   const start = hour * 60 + minute;
   const slots = Math.ceil(durationMinutes / 30);
@@ -99,6 +101,8 @@ export async function ensureNoAppointmentConflict({
   const appointments = await Appointment.find(query)
     .select("time durationMinutes")
     .lean();
+
+  // Check generated slot keys instead of exact start times to catch partial overlaps.
   const requested = new Set(requestedSlots);
   const exists = appointments.some((appointment) => {
     const occupiedSlots = createSlotKeys({
@@ -117,6 +121,7 @@ export async function ensureNoAppointmentConflict({
 
 export async function syncAppointmentClient({ name, phone }) {
   try {
+    // The client record is a convenience mirror; appointment creation should survive sync issues.
     await Client.findOneAndUpdate(
       { phone },
       { name, phone },

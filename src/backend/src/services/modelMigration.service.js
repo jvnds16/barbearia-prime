@@ -35,6 +35,7 @@ const migrations = {
   }
 };
 
+// Legacy index names must be dropped before fields are renamed.
 const legacyIndexes = {
   appointments: ["data_1_horario_1_barbeiro_1"],
   clients: ["telefone_1"],
@@ -53,6 +54,7 @@ export async function migrateModelFieldsToEnglish() {
     servicos: "services"
   };
 
+  // Rename old Portuguese collections only when the English collection is absent.
   for (const [oldName, newName] of Object.entries(collectionRenames)) {
     if (!existingCollections.has(oldName)) continue;
     if (existingCollections.has(newName)) {
@@ -76,6 +78,7 @@ export async function migrateModelFieldsToEnglish() {
     }
 
     for (const [oldName, newName] of Object.entries(fields)) {
+      // Keep existing English values when both versions are present.
       await collection.updateMany(
         { [oldName]: { $exists: true }, [newName]: { $exists: false } },
         { $rename: { [oldName]: newName } }
@@ -84,6 +87,7 @@ export async function migrateModelFieldsToEnglish() {
   }
 
   if (existingCollections.has("appointments")) {
+    // Normalize legacy attendance statuses after field migration.
     await database.collection("appointments").updateMany(
       { status: { $in: ["pendente", "presente", "ausente", "concluido", "completed", "cancelado"] } },
       [
@@ -106,6 +110,7 @@ export async function migrateModelFieldsToEnglish() {
     );
   }
 
+  // Rebuild indexes from the current Mongoose models after the migration.
   await Promise.all([
     Appointment.createIndexes(),
     Barber.createIndexes(),

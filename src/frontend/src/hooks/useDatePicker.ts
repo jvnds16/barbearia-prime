@@ -13,6 +13,7 @@ function getInitialDate(value: string, min: string, max: string, preferToday: bo
   if (value) return parseLocalDate(value);
 
   const todayValue = toDateValue(new Date());
+  // Public booking starts on today when it is inside the allowed range.
   if (preferToday && todayValue >= min && todayValue <= max) {
     return parseLocalDate(todayValue);
   }
@@ -64,6 +65,7 @@ export function useDatePicker({
   const monthStart = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1);
   const gridStart = new Date(monthStart);
   gridStart.setDate(1 - monthStart.getDay());
+  // Six weeks keep the calendar grid size stable while navigating months.
   const days = Array.from({ length: 42 }, (_, index) => {
     const date = new Date(gridStart);
     date.setDate(gridStart.getDate() + index);

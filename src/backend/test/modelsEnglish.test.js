@@ -5,7 +5,7 @@ import { Barber } from "../src/models/barber.model.js";
 import { Client } from "../src/models/client.model.js";
 import { Service } from "../src/models/service.model.js";
 
-test("os models usam nomes de campos em inglês", () => {
+test("models use English field names", () => {
   assert.deepEqual(
     ["customerName", "customerPhone", "serviceName", "price", "durationMinutes", "date", "time", "barber"]
       .filter((field) => !Appointment.schema.path(field)),
@@ -16,7 +16,7 @@ test("os models usam nomes de campos em inglês", () => {
   assert.deepEqual(["name", "price", "duration", "active"].filter((field) => !Service.schema.path(field)), []);
 });
 
-test("os models não expõem os campos antigos em português", () => {
+test("models do not expose legacy Portuguese fields", () => {
   const oldFields = [
     [Appointment, ["nome", "telefone", "servico", "preco", "duracaoMinutos", "data", "horario", "barbeiro"]],
     [Barber, ["nome", "telefone", "especialidades", "ativo"]],
@@ -29,14 +29,14 @@ test("os models não expõem os campos antigos em português", () => {
   }
 });
 
-test("as coleções dos models usam nomes em inglês", () => {
+test("model collections use English names", () => {
   assert.equal(Appointment.collection.collectionName, "appointments");
   assert.equal(Barber.collection.collectionName, "barbers");
   assert.equal(Client.collection.collectionName, "clients");
   assert.equal(Service.collection.collectionName, "services");
 });
 
-test("agendamentos aceitam presença e ausência", () => {
+test("appointments support present and absent statuses", () => {
   const allowedStatuses = Appointment.schema.path("status").enumValues;
 
   assert.equal(allowedStatuses.includes("pending"), true);

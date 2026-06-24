@@ -8,6 +8,7 @@ export function toDateValue(date: Date) {
 export const parseLocalDate = (value: string) => new Date(`${value}T00:00:00`);
 
 export function addLocalDays(date: Date, days: number) {
+  // Constructing with local date parts avoids UTC shifts around midnight.
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }
 

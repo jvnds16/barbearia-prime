@@ -25,6 +25,7 @@ build/
 .env
 .env.*
 !.env.example
+!frontend/.env.production
 .env.local
 .env*.local
 

@@ -38,6 +38,7 @@ export async function listServices() {
   const response = await apiRequest<ApiResponse<ApiService[]>>("/services");
   return {
     ...response,
+    // The local UI type mirrors the API but keeps the mapping explicit for future contract changes.
     data: response.data.map(
       (service): Service => ({
         _id: service._id,

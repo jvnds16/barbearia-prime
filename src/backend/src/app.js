@@ -17,6 +17,7 @@ const vercelOriginPattern = /^https:\/\/[a-z0-9-]+\.vercel\.app$/i;
 const allowedOrigins = new Set([env.frontendUrl, "http://localhost:3000"]);
 
 if (env.nodeEnv === "production") {
+  // Required so Express reports secure proxy headers correctly on Vercel.
   app.set("trust proxy", 1);
 }
 
@@ -24,6 +25,7 @@ app.use(helmet());
 app.use(
   cors({
     origin(origin, callback) {
+      // Allow same-origin requests, the configured frontend, and Vercel preview URLs.
       if (!origin || env.frontendUrl === "*" || allowedOrigins.has(origin) || vercelOriginPattern.test(origin)) {
         return callback(null, true);
       }
@@ -40,6 +42,7 @@ app.use("/api", routes);
 
 app.use(express.static(frontendDistPath));
 app.get("*", (req, res, next) => {
+  // API misses should use the JSON error handler, while app routes fall back to React.
   if (req.path.startsWith("/api")) {
     return next();
   }

@@ -34,6 +34,7 @@ export function usePublicAppointments() {
       const localData = localStorage.getItem(STORAGE_KEY);
       let hasLocalData = false;
       if (localData && !forceRefresh) {
+        // Local cache keeps the booking UI useful before the remote refresh finishes.
         const parsedData = sanitizePublicAppointments(JSON.parse(localData));
         localStorage.setItem(STORAGE_KEY, JSON.stringify(parsedData));
         setAppointments(parsedData);
@@ -45,6 +46,7 @@ export function usePublicAppointments() {
         const result = await appointmentService.list();
         if (result.success && result.data) {
           const publicAppointments = sanitizePublicAppointments(result.data);
+          // Ignore stale responses when a newer agenda request has already started.
           if (requestSequence !== agendaRequestSequenceRef.current)
             return "remote";
 
@@ -95,6 +97,7 @@ export function usePublicAppointments() {
       const time = now.toLocaleTimeString("pt-BR", { hour12: false });
       setCurrentTime(time);
       setCurrentDate(now.toLocaleDateString("pt-BR"));
+      // Refresh once at closing time so stale same-day bookings disappear.
       if (time === "20:00:00") void fetchAppointments(true);
     };
 
@@ -114,6 +117,7 @@ export function usePublicAppointments() {
 
     clearOldData();
     void fetchAppointments(true, false);
+    // Expire the local snapshot daily even if the tab stays open.
     const interval = window.setInterval(clearOldData, 60 * 60 * 1000);
     return () => window.clearInterval(interval);
   }, []);
@@ -124,6 +128,7 @@ export function usePublicAppointments() {
         void fetchAppointments(true, false);
     };
 
+    // Visible tabs poll often enough to reduce double-booking without feeling heavy.
     const interval = window.setInterval(synchronizeAgenda, 15000);
     window.addEventListener("focus", synchronizeAgenda);
     document.addEventListener("visibilitychange", synchronizeAgenda);
@@ -149,6 +154,7 @@ export function usePublicAppointments() {
     };
 
     removePastAppointments();
+    // Keep old appointments from blocking future date calculations in long-lived sessions.
     const interval = window.setInterval(removePastAppointments, 60000);
     return () => window.clearInterval(interval);
   }, []);

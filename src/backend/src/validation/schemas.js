@@ -2,6 +2,8 @@ import { z } from "zod";
 
 const trimmedText = (minimum, maximum) =>
   z.string().trim().min(minimum).max(maximum);
+
+// Brazilian phone numbers are stored as digits with area code, regardless of input formatting.
 const phone = trimmedText(8, 20).refine(
   (value) => /^[1-9]{2}(?:[2-8]|9[1-9])[0-9]{7,8}$/.test(value.replace(/\D/g, "")),
   "Invalid phone. Include the area code."
@@ -61,6 +63,7 @@ const appointmentFields = {
   idempotencyKey: z.string().optional()
 };
 
+// Appointment creation is permissive because business validation also derives service data.
 export const appointmentCreateSchema = z.object({
   ...appointmentFields,
   customerName: z.string(),

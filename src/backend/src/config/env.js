@@ -8,10 +8,12 @@ function normalizeUrl(value) {
   const url = value?.trim();
   if (!url) return undefined;
 
+  // Vercel exposes domains without a protocol, but CORS needs absolute origins.
   return `${/^https?:\/\//i.test(url) ? "" : "https://"}${url}`.replace(/\/+$/, "");
 }
 
 export function resolveFrontendUrl(environment = process.env) {
+  // Prefer explicit configuration, then Vercel production and preview URLs.
   return (
     normalizeUrl(environment.FRONTEND_URL) ||
     normalizeUrl(environment.VERCEL_PROJECT_PRODUCTION_URL) ||
@@ -33,18 +35,19 @@ export const env = {
 export function validateProductionEnv() {
   if (nodeEnv !== "production") return;
 
+  // Production must fail fast when security-sensitive values are missing.
   const missing = [];
   if (!env.mongoUri) missing.push("MONGODB_URI");
   if (!env.adminPassword) missing.push("ADMIN_PASSWORD");
   if (!env.jwtSecret) missing.push("JWT_SECRET");
 
   if (missing.length) {
-    throw new Error(`Variáveis obrigatórias ausentes: ${missing.join(", ")}`);
+    throw new Error(`Missing required environment variables: ${missing.join(", ")}`);
   }
   if (env.adminPassword.length < 12) {
-    throw new Error("ADMIN_PASSWORD deve ter pelo menos 12 caracteres.");
+    throw new Error("ADMIN_PASSWORD must have at least 12 characters.");
   }
   if (env.jwtSecret.length < 32) {
-    throw new Error("JWT_SECRET deve ter pelo menos 32 caracteres.");
+    throw new Error("JWT_SECRET must have at least 32 characters.");
   }
 }

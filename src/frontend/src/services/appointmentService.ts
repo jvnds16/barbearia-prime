@@ -35,6 +35,7 @@ const statusFromApi: Record<
   cancelled: "cancelled",
 };
 
+// The API still accepts "completed", but the UI treats it as an attended appointment.
 const statusToApi: Record<
   NonNullable<Appointment["status"]>,
   ApiAppointmentStatus
@@ -134,6 +135,7 @@ export const appointmentService = {
       headers.set("Idempotency-Key", appointment.idempotencyKey);
     }
 
+    // Keep the payload builder in one place so the retry sends an identical request.
     const send = () =>
       apiRequest<ApiResponse<ApiAppointment>>("/appointments", {
         method: "POST",
@@ -152,6 +154,7 @@ export const appointmentService = {
         throw error;
       }
 
+      // A brief retry helps when a cold serverless function is still connecting to MongoDB.
       await wait(1200);
       return mapAppointmentResponse(await send());
     }

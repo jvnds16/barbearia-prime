@@ -3,6 +3,7 @@ import { Appointment } from "../types/appointment";
 export const sanitizePublicAppointments = (
   appointments: Appointment[],
 ): Appointment[] =>
+  // Public cache only needs occupancy data, not customer information.
   appointments.map(({ date, time, status, durationMinutes }) => ({
     customerName: "",
     customerPhone: "",
@@ -19,6 +20,7 @@ export function hasAppointmentConflict(
   time: string,
   durationMinutes: number,
 ) {
+  // Range comparison catches overlaps from services longer than a single 30-minute slot.
   const [candidateHour, candidateMinute] = time.split(":").map(Number);
   const candidateStart = candidateHour * 60 + candidateMinute;
   const candidateEnd = candidateStart + durationMinutes;
@@ -56,6 +58,7 @@ export function isValidPhone(phone: string) {
 export function createAvailableTimes() {
   const times = [];
 
+  // Business hours are 08:00-19:00 with a lunch break at 12:00.
   for (let hour = 8; hour <= 19; hour += 1) {
     if (hour === 12) continue;
 

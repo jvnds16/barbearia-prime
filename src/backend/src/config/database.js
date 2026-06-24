@@ -9,7 +9,7 @@ export function isDatabaseConnected() {
 
 export async function connectDatabase() {
   if (!env.mongoUri) {
-    throw new Error("MONGODB_URI não configurada. Crie backend/.env a partir de backend/.env.example.");
+    throw new Error("MONGODB_URI is not configured. Create backend/.env from backend/.env.example.");
   }
 
   mongoose.set("strictQuery", true);
@@ -19,6 +19,7 @@ export async function connectDatabase() {
   }
 
   if (!connectionPromise) {
+    // Share one connection attempt across concurrent requests during startup.
     connectionPromise = mongoose.connect(env.mongoUri, {
       dbName: env.mongoDb,
       serverSelectionTimeoutMS: 10000

@@ -39,7 +39,7 @@ const initialDashboardStats: DashboardStats = {
   mostPopularServices: [],
 };
 
-// Mensagens em português
+// User-facing admin messages remain localized.
 const MESSAGES = {
   SESSION_EXPIRED: "Sua sessão expirou. Entre novamente.",
   UNABLE_TO_UPDATE: "Não foi possível atualizar os dados do painel.",
@@ -126,6 +126,7 @@ export function useAdminPanel() {
   const loadAppointments = async (silent = false) => {
     if (loadingAppointmentsRef.current) return;
 
+    // Avoid overlapping admin refreshes from manual actions and polling.
     loadingAppointmentsRef.current = true;
     if (!silent) setLoading(true);
 
@@ -139,7 +140,7 @@ export function useAdminPanel() {
         );
       }
     } catch (error) {
-      console.error("Erro ao carregar agendamentos:", error);
+      console.error("Could not load appointments:", error);
       if (error instanceof ApiError && error.status === 401) {
         authService.logout();
         setIsAuthenticated(false);
@@ -159,6 +160,7 @@ export function useAdminPanel() {
     if (!isAuthenticated) return;
 
     void loadAppointments();
+    // Admin dashboard stays live while the barber keeps the page open.
     const interval = window.setInterval(
       () => void loadAppointments(true),
       30000,
@@ -207,6 +209,7 @@ export function useAdminPanel() {
     setEditErrors({});
     setMessage(null);
     if (activeTab === "dashboard") {
+      // Jump from a dashboard card into the editable appointment list context.
       setFilterDate(appointment.date);
       setActiveTab("appointments");
     }
@@ -229,6 +232,7 @@ export function useAdminPanel() {
       (appointment) => appointment._id === editingId,
     );
 
+    // Edited appointments follow the same public booking constraints.
     if (name.length < 3 || name.split(" ").length < 2)
       nextErrors.customerName = MESSAGES.NAME_VALIDATION;
     if (!/^[1-9]{2}(?:[2-8]|9[1-9])[0-9]{7,8}$/.test(phone))
@@ -264,7 +268,7 @@ export function useAdminPanel() {
       const updateData = { ...editForm };
       delete updateData._id;
       const result = await appointmentService.update(editingId, updateData);
-      if (!result.success) throw new Error(result.error || "Erro desconhecido");
+      if (!result.success) throw new Error(result.error || "Unknown error");
 
       const updated = appointments.map((appointment) =>
         appointment._id === editingId ? { ...result.data } : appointment,
@@ -276,7 +280,7 @@ export function useAdminPanel() {
       setEditErrors({});
       setMessage({ type: "success", text: MESSAGES.UPDATE_SUCCESS });
     } catch (error) {
-      console.error("Erro ao atualizar agendamento:", error);
+      console.error("Could not update appointment:", error);
       setMessage({
         type: "error",
         text: error instanceof Error ? error.message : MESSAGES.UPDATE_ERROR,
@@ -290,7 +294,7 @@ export function useAdminPanel() {
     setLoading(true);
     try {
       const result = await appointmentService.remove(id);
-      if (!result.success) throw new Error(result.error || "Erro desconhecido");
+      if (!result.success) throw new Error(result.error || "Unknown error");
 
       const updated = appointments.map((appointment) =>
         appointment._id === id ? result.data : appointment,
@@ -300,7 +304,7 @@ export function useAdminPanel() {
       setDeleteTarget(null);
       setMessage({ type: "success", text: MESSAGES.CANCEL_SUCCESS });
     } catch (error) {
-      console.error("Erro ao excluir agendamento:", error);
+      console.error("Could not cancel appointment:", error);
       setMessage({
         type: "error",
         text: error instanceof Error ? error.message : MESSAGES.CANCEL_ERROR,
@@ -316,6 +320,7 @@ export function useAdminPanel() {
   ) => {
     if (!editForm || field === "_id") return;
 
+    // Changing the service should immediately keep the derived price in sync.
     const selectedService =
       field === "serviceName"
         ? services.find((service) => service.name === value)

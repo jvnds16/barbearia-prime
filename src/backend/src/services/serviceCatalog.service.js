@@ -10,6 +10,7 @@ export const defaultServices = [
 ];
 
 export async function seedDefaultServices() {
+  // Seed only missing services so admin edits are not overwritten on startup.
   await Service.bulkWrite(
     defaultServices.map((service) => ({
       updateOne: {
@@ -29,6 +30,7 @@ export async function resolveServicePrice(serviceName) {
 }
 
 export function parseDurationMinutes(duration) {
+  // Durations are stored as display text, so derive minutes defensively.
   const minutes = Number.parseInt(String(duration || ""), 10);
   return Number.isFinite(minutes) && minutes > 0 ? minutes : 30;
 }

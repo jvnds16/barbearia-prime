@@ -1,6 +1,7 @@
 export const BUSINESS_TIME_ZONE = "America/Sao_Paulo";
 
 function getParts(date = new Date()) {
+  // Business-day calculations always follow Sao Paulo time, independent of server locale.
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: BUSINESS_TIME_ZONE,
     year: "numeric",
@@ -26,11 +27,13 @@ export function businessMinutesNow(date = new Date()) {
 
 export function addDaysToISO(dateISO, days) {
   const [year, month, day] = dateISO.split("-").map(Number);
+  // Noon UTC avoids date rollover issues when formatting back to ISO.
   const date = new Date(Date.UTC(year, month - 1, day + days, 12));
   return date.toISOString().slice(0, 10);
 }
 
 export function isSunday(dateISO) {
   const [year, month, day] = dateISO.split("-").map(Number);
+  // Use UTC noon so the weekday check is stable across host time zones.
   return new Date(Date.UTC(year, month - 1, day, 12)).getUTCDay() === 0;
 }

@@ -7,6 +7,7 @@ let initializationPromise;
 
 function initializeApplication() {
   if (!initializationPromise) {
+    // Cache initialization between serverless invocations in the same runtime.
     initializationPromise = (async () => {
       validateProductionEnv();
       await connectDatabase();
@@ -24,6 +25,7 @@ export function restoreOriginalApiPath(req) {
   const rewrittenPath = req.query?.path;
   if (!rewrittenPath) return;
 
+  // Vercel rewrites /api/* into a query parameter; Express expects the original path.
   const path = Array.isArray(rewrittenPath) ? rewrittenPath.join("/") : rewrittenPath;
   const url = new URL(req.url, "http://localhost");
   url.searchParams.delete("path");
@@ -39,10 +41,10 @@ export default async function handler(req, res) {
     await initializeApplication();
     return app(req, res);
   } catch (error) {
-    console.error("Falha ao inicializar a Function:", error);
+    console.error("Could not initialize the serverless function:", error);
     return res.status(503).json({
       success: false,
-      error: "O serviço está temporariamente indisponível."
+      error: "The service is temporarily unavailable."
     });
   }
 }
