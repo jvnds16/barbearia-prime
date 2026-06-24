@@ -2,7 +2,7 @@ import { Appointment } from "../models/appointment.model.js";
 import { Client } from "../models/client.model.js";
 import { HttpError } from "../utils/httpError.js";
 import { addDaysToISO, businessMinutesNow } from "../utils/dateTime.js";
-import { gerarHorariosDisponiveis, hojeISO } from "../utils/timeSlots.js";
+import { generateAvailableTimeSlots, todayISO } from "../utils/timeSlots.js";
 
 export const VALID_APPOINTMENT_STATUSES = new Set([
   "pending",
@@ -44,56 +44,56 @@ function isValidDate(date) {
 }
 
 export function isValidAppointmentDate(date) {
-  const maximumDate = addDaysToISO(hojeISO(), 30);
-  return isValidDate(date) && date >= hojeISO() && date <= maximumDate;
+  const maximumDate = addDaysToISO(todayISO(), 30);
+  return isValidDate(date) && date >= todayISO() && date <= maximumDate;
 }
 
 export function isValidAppointmentTime(time) {
-  return gerarHorariosDisponiveis().includes(time);
+  return generateAvailableTimeSlots().includes(time);
 }
 
 export function hasRequiredLeadTime(time, date) {
-  if (date !== hojeISO()) return true;
+  if (date !== todayISO()) return true;
 
   const [hour, minute] = time.split(":").map(Number);
   return hour * 60 + minute > businessMinutesNow() + 30;
 }
 
 export function createSlotKeys({
-  data,
-  horario,
-  barbeiro,
-  duracaoMinutos = 30,
+  date,
+  time,
+  barber,
+  durationMinutes = 30,
   status = "pending"
 }) {
   if (!BLOCKING_APPOINTMENT_STATUSES.includes(status)) return undefined;
 
-  const [hour, minute] = horario.split(":").map(Number);
+  const [hour, minute] = time.split(":").map(Number);
   const start = hour * 60 + minute;
-  const slots = Math.ceil(duracaoMinutos / 30);
+  const slots = Math.ceil(durationMinutes / 30);
 
   return Array.from({ length: slots }, (_, index) => {
     const slotMinutes = start + index * 30;
     const slotHour = String(Math.floor(slotMinutes / 60)).padStart(2, "0");
     const slotMinute = String(slotMinutes % 60).padStart(2, "0");
-    return `${data}|${slotHour}:${slotMinute}|${barbeiro || "principal"}`;
+    return `${date}|${slotHour}:${slotMinute}|${barber || "primary"}`;
   });
 }
 
 export async function ensureNoAppointmentConflict({
-  data,
-  horario,
-  barbeiro,
-  duracaoMinutos = 30,
+  date,
+  time,
+  barber,
+  durationMinutes = 30,
   ignoreId
 }) {
-  const requestedSlots = createSlotKeys({ data, horario, barbeiro, duracaoMinutos });
+  const requestedSlots = createSlotKeys({ date, time, barber, durationMinutes });
   const query = {
-    date: data,
+    date,
     status: { $in: BLOCKING_APPOINTMENT_STATUSES }
   };
 
-  if (barbeiro) query.barber = barbeiro;
+  if (barber) query.barber = barber;
   if (ignoreId) query._id = { $ne: ignoreId };
 
   const appointments = await Appointment.find(query)
@@ -102,10 +102,10 @@ export async function ensureNoAppointmentConflict({
   const requested = new Set(requestedSlots);
   const exists = appointments.some((appointment) => {
     const occupiedSlots = createSlotKeys({
-      data,
-      horario: appointment.time,
-      barbeiro,
-      duracaoMinutos: appointment.durationMinutes || 30
+      date,
+      time: appointment.time,
+      barber,
+      durationMinutes: appointment.durationMinutes || 30
     });
     return occupiedSlots.some((slot) => requested.has(slot));
   });

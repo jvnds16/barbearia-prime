@@ -1,32 +1,32 @@
 import { Appointment } from "../models/appointment.model.js";
-import { gerarHorariosDisponiveis, hojeISO } from "../utils/timeSlots.js";
+import { generateAvailableTimeSlots, todayISO } from "../utils/timeSlots.js";
 import { businessMinutesNow } from "../utils/dateTime.js";
 
-function horarioEhFuturoComMargem(horario, data) {
-  if (data !== hojeISO()) return true;
+function hasFutureLeadTime(time, date) {
+  if (date !== todayISO()) return true;
 
-  const [hora, minuto] = horario.split(":").map(Number);
-  const minutosHorario = hora * 60 + minuto;
+  const [hour, minute] = time.split(":").map(Number);
+  const slotMinutes = hour * 60 + minute;
 
-  return minutosHorario > businessMinutesNow() + 30;
+  return slotMinutes > businessMinutesNow() + 30;
 }
 
-export async function getAvailableSlots({ data, barbeiro }) {
+export async function getAvailableSlots({ date, barber }) {
   const query = {
-    date: data,
+    date,
     status: { $in: ["pending", "present", "completed"] }
   };
 
-  if (barbeiro) {
-    query.barber = barbeiro;
+  if (barber) {
+    query.barber = barber;
   }
 
   const appointments = await Appointment.find(query)
     .select("time durationMinutes")
     .lean();
 
-  return gerarHorariosDisponiveis().filter((horario) => {
-    const [hour, minute] = horario.split(":").map(Number);
+  return generateAvailableTimeSlots().filter((time) => {
+    const [hour, minute] = time.split(":").map(Number);
     const candidateStart = hour * 60 + minute;
     const candidateEnd = candidateStart + 30;
     const occupied = appointments.some((item) => {
@@ -36,6 +36,6 @@ export async function getAvailableSlots({ data, barbeiro }) {
       return candidateStart < appointmentEnd && candidateEnd > appointmentStart;
     });
 
-    return !occupied && horarioEhFuturoComMargem(horario, data);
+    return !occupied && hasFutureLeadTime(time, date);
   });
 }

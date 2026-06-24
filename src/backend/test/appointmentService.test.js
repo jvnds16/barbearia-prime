@@ -28,10 +28,10 @@ test("validates the configured appointment time grid", () => {
 test("creates one conflict key for every occupied 30-minute slot", () => {
   assert.deepEqual(
     createSlotKeys({
-      data: "2026-06-22",
-      horario: "09:00",
-      barbeiro: "barber-id",
-      duracaoMinutos: 80
+      date: "2026-06-22",
+      time: "09:00",
+      barber: "barber-id",
+      durationMinutes: 80
     }),
     [
       "2026-06-22|09:00|barber-id",
@@ -44,8 +44,8 @@ test("creates one conflict key for every occupied 30-minute slot", () => {
 test("does not reserve slots for non-blocking statuses", () => {
   assert.equal(
     createSlotKeys({
-      data: "2026-06-22",
-      horario: "09:00",
+      date: "2026-06-22",
+      time: "09:00",
       status: "cancelled"
     }),
     undefined

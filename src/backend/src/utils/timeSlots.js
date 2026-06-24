@@ -1,20 +1,21 @@
-export function gerarHorariosDisponiveis() {
-  const horarios = [];
+import { businessDateISO } from "./dateTime.js";
 
-  for (let hora = 8; hora <= 19; hora += 1) {
-    if (hora === 12) continue;
+export function generateAvailableTimeSlots() {
+  const timeSlots = [];
 
-    horarios.push(`${String(hora).padStart(2, "0")}:00`);
+  for (let hour = 8; hour <= 19; hour += 1) {
+    if (hour === 12) continue;
 
-    if (hora !== 19) {
-      horarios.push(`${String(hora).padStart(2, "0")}:30`);
+    timeSlots.push(`${String(hour).padStart(2, "0")}:00`);
+
+    if (hour !== 19) {
+      timeSlots.push(`${String(hour).padStart(2, "0")}:30`);
     }
   }
 
-  return horarios;
+  return timeSlots;
 }
 
-export function hojeISO() {
+export function todayISO() {
   return businessDateISO();
 }
-import { businessDateISO } from "./dateTime.js";
