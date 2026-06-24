@@ -653,8 +653,8 @@ function App() {
           className="fixed inset-0 z-[85] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="refresh-schedule-title"
-          aria-describedby="refresh-schedule-description"
+          aria-labelledby="refresh-appointment-title"
+          aria-describedby="refresh-appointment-description"
         >
           <div className="w-full max-w-sm rounded-2xl border border-zinc-700 bg-gradient-to-b from-zinc-900 to-zinc-950 p-7 text-center shadow-2xl shadow-black/70">
             <div className="relative mx-auto mb-5 flex h-16 w-16 items-center justify-center">
@@ -663,13 +663,13 @@ function App() {
               <RefreshCw className="h-6 w-6 text-amber-300" />
             </div>
             <h3
-              id="refresh-schedule-title"
+              id="refresh-appointment-title"
               className="text-xl font-bold text-white"
             >
               Atualizando horários
             </h3>
             <p
-              id="refresh-schedule-description"
+              id="refresh-appointment-description"
               className="mt-2 text-sm leading-6 text-zinc-400"
             >
               Aguarde enquanto buscamos os horários ocupados mais recentes.
