@@ -3,7 +3,6 @@ import {
   createAppointment,
   deleteAppointment,
   listAppointments,
-  listAvailableSlots,
   listPublicAppointments,
   updateAppointment
 } from "../controllers/appointment.controller.js";
@@ -15,7 +14,6 @@ import {
   appointmentCreateSchema,
   appointmentListQuerySchema,
   appointmentUpdateSchema,
-  availabilityQuerySchema,
   objectIdParamsSchema,
   publicAppointmentQuerySchema
 } from "../validation/schemas.js";
@@ -38,11 +36,6 @@ appointmentRoutes.get(
   "/public",
   validateRequest(publicAppointmentQuerySchema, "query"),
   wrap(listPublicAppointments)
-);
-appointmentRoutes.get(
-  "/available-slots",
-  validateRequest(availabilityQuerySchema, "query"),
-  wrap(listAvailableSlots)
 );
 appointmentRoutes.put(
   "/:id",

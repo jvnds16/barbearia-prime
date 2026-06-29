@@ -1,6 +1,5 @@
 import { Appointment } from "../models/appointment.model.js";
 import { resolveServiceDetails } from "../services/serviceCatalog.service.js";
-import { getAvailableSlots } from "../services/availability.service.js";
 import {
   BLOCKING_APPOINTMENT_STATUSES,
   VALID_APPOINTMENT_STATUSES,
@@ -225,15 +224,4 @@ export async function deleteAppointment(req, res) {
   }
 
   return res.json({ success: true, message: "Appointment cancelled successfully.", data: appointment });
-}
-
-export async function listAvailableSlots(req, res) {
-  const { date } = req.query;
-
-  if (!date) {
-    return res.status(400).json({ success: false, error: "Date is required to list available time slots." });
-  }
-
-  const timeSlots = await getAvailableSlots({ date });
-  return res.json({ success: true, data: timeSlots });
 }

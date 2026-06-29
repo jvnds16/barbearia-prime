@@ -158,21 +158,6 @@ paths:
         "200": { description: Agendamento cancelado }
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
-  /appointments/available-slots:
-    get:
-      security: []
-      summary: Lista horários disponíveis
-      parameters:
-        - name: date
-          in: query
-          required: true
-          schema: { type: string, format: date }
-        - name: barber
-          in: query
-          schema: { type: string, pattern: "^[a-fA-F0-9]{24}$" }
-      responses:
-        "200": { description: Horários disponíveis }
-        "400": { $ref: "#/components/responses/BadRequest" }
   /appointments/public:
     get:
       security: []

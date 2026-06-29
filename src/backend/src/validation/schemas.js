@@ -67,10 +67,6 @@ export const appointmentListQuerySchema = z.object({
   status: z.enum(APPOINTMENT_STATUSES).optional()
 });
 
-export const availabilityQuerySchema = z.object({
-  date: z.string().min(1, "Date is required to list available time slots.")
-});
-
 export const publicAppointmentQuerySchema = z.object({
   date: z.string().optional()
 });

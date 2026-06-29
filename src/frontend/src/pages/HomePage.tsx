@@ -58,9 +58,6 @@ type StatusModal = {
   actionLabel?: string;
 } | null;
 
-const STORAGE_KEY = "appointments";
-const STORAGE_TIMESTAMP_KEY = "appointmentsTimestamp";
-
 // User-facing validation messages remain localized.
 const VALIDATION_MESSAGES = {
   NAME_REQUIRED: "Informe seu nome completo.",
@@ -360,13 +357,7 @@ function HomePage() {
       const synchronizedAppointments = [...otherDates, ...latestAppointments];
 
       if (requestSequence === agendaRequestSequenceRef.current) {
-        // Replace only the selected date so other cached days remain available.
         setAppointments(synchronizedAppointments);
-        localStorage.setItem(
-          STORAGE_KEY,
-          JSON.stringify(synchronizedAppointments),
-        );
-        localStorage.setItem(STORAGE_TIMESTAMP_KEY, Date.now().toString());
       }
 
       if (
@@ -509,16 +500,12 @@ function HomePage() {
 
       const publicAppointment = sanitizePublicAppointments([result.data])[0];
       setAppointments((currentAppointments) => {
-        // Update the local public cache immediately so the new slot disappears.
         const withoutDuplicateTime = currentAppointments.filter(
           (appointment) =>
             appointment.date !== publicAppointment.date ||
             appointment.time !== publicAppointment.time,
         );
-        const newAppointments = [...withoutDuplicateTime, publicAppointment];
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(newAppointments));
-        localStorage.setItem(STORAGE_TIMESTAMP_KEY, Date.now().toString());
-        return newAppointments;
+        return [...withoutDuplicateTime, publicAppointment];
       });
 
       setSuccessMessage(VALIDATION_MESSAGES.SUCCESS);
@@ -530,7 +517,7 @@ function HomePage() {
         actionLabel: VALIDATION_MESSAGES.WHATSAPP_LABEL,
       });
 
-      void fetchAppointments(true, false);
+      void fetchAppointments(false);
     } catch (error: unknown) {
       console.error("Could not save appointment:", error);
 
@@ -543,7 +530,7 @@ function HomePage() {
             ...prev,
             time: VALIDATION_MESSAGES.TIME_TAKEN,
           }));
-          await fetchAppointments(true, false);
+          await fetchAppointments(false);
         }
 
         setStatusModal({

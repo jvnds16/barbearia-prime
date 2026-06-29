@@ -15,28 +15,25 @@ function appointmentFromApi(appointment: Appointment): Appointment {
 const wait = (milliseconds: number) =>
   new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 
+async function listAppointments(path: string, params?: { date?: string }, auth = false) {
+  const search = new URLSearchParams();
+  if (params?.date) search.set("date", params.date);
+
+  const suffix = search.toString() ? `?${search.toString()}` : "";
+  const response = await apiRequest<ApiResponse<Appointment[]>>(
+    `${path}${suffix}`,
+    auth ? { auth: true } : undefined,
+  );
+  return { ...response, data: response.data.map(appointmentFromApi) };
+}
+
 export const appointmentService = {
   async list(params?: { date?: string }) {
-    const search = new URLSearchParams();
-    if (params?.date) search.set("date", params.date);
-
-    const suffix = search.toString() ? `?${search.toString()}` : "";
-    const response = await apiRequest<ApiResponse<Appointment[]>>(
-      `/appointments/public${suffix}`,
-    );
-    return { ...response, data: response.data.map(appointmentFromApi) };
+    return listAppointments("/appointments/public", params);
   },
 
   async listAdmin(params?: { date?: string }) {
-    const search = new URLSearchParams();
-    if (params?.date) search.set("date", params.date);
-
-    const suffix = search.toString() ? `?${search.toString()}` : "";
-    const response = await apiRequest<ApiResponse<Appointment[]>>(
-      `/appointments${suffix}`,
-      { auth: true },
-    );
-    return { ...response, data: response.data.map(appointmentFromApi) };
+    return listAppointments("/appointments", params, true);
   },
 
   async create(appointment: Appointment) {

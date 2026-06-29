@@ -1,18 +1,28 @@
 import { Clock, RefreshCw, Scissors } from "lucide-react";
+import type { ReactNode } from "react";
 import { Appointment } from "../../types/appointment";
 
 function OccupiedTimes({
   title,
   appointments,
   emptyMessage,
+  action,
 }: {
   title: string;
   appointments: Appointment[];
   emptyMessage: string;
+  action?: ReactNode;
 }) {
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-6 shadow-xl shadow-black/30">
-      <h3 className="text-xl font-bold mb-4">{title}</h3>
+      {action ? (
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-xl font-bold">{title}</h3>
+          {action}
+        </div>
+      ) : (
+        <h3 className="text-xl font-bold mb-4">{title}</h3>
+      )}
       {appointments.length === 0 ? (
         <p className="text-white">{emptyMessage}</p>
       ) : (
@@ -62,9 +72,11 @@ export function AvailabilityPanel({
 }) {
   return (
     <div className="w-full lg:w-96 space-y-6">
-      <div className="rounded-lg border border-zinc-800 bg-zinc-900/80 p-6 shadow-xl shadow-black/30">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xl font-bold">Horários ocupados — hoje</h3>
+      <OccupiedTimes
+        title="Horários ocupados — hoje"
+        appointments={today}
+        emptyMessage="Nenhum agendamento para hoje."
+        action={
           <button
             type="button"
             onClick={onRefresh}
@@ -77,40 +89,8 @@ export function AvailabilityPanel({
             />
             {refreshing ? "Atualizando..." : "Atualizar"}
           </button>
-        </div>
-        {today.length === 0 ? (
-          <p className="text-white">Nenhum agendamento para hoje.</p>
-        ) : (
-          <ul className="space-y-2">
-            {[...today]
-              .sort((first, second) => first.time.localeCompare(second.time))
-              .map((appointment, index) => (
-                <li
-                  key={index}
-                  className="rounded-lg border border-zinc-800 bg-zinc-950/80 p-3 text-sm"
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <span className="font-bold text-amber-400">
-                        Horário ocupado
-                      </span>
-                      <div className="text-white mt-1">
-                        <Scissors className="inline-block mr-1" />
-                        Indisponível para agendamento
-                      </div>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <span className="inline-flex items-center gap-1 whitespace-nowrap rounded bg-zinc-800 px-2 py-1 font-mono">
-                        <Clock className="shrink-0" />
-                        {appointment.time}
-                      </span>
-                    </div>
-                  </div>
-                </li>
-              ))}
-          </ul>
-        )}
-      </div>
+        }
+      />
       <OccupiedTimes
         title="Horários ocupados — amanhã"
         appointments={tomorrow}

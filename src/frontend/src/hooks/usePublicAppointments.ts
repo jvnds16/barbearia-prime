@@ -4,10 +4,7 @@ import { Appointment } from "../types/appointment";
 import { sanitizePublicAppointments } from "../utils/appointment";
 import { addLocalDays, toDateValue } from "../utils/date";
 
-type RefreshResult = "remote" | "local" | "empty";
-
-const STORAGE_KEY = "appointments";
-const STORAGE_TIMESTAMP_KEY = "appointmentsTimestamp";
+type RefreshResult = "remote" | "empty";
 
 export function usePublicAppointments() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -27,52 +24,26 @@ export function usePublicAppointments() {
   };
 
   const fetchAppointments = async (
-    forceRefresh = false,
     notifyOnSuccess = true,
   ): Promise<RefreshResult> => {
+    const requestSequence = ++agendaRequestSequenceRef.current;
+
     try {
-      const localData = localStorage.getItem(STORAGE_KEY);
-      let hasLocalData = false;
-      if (localData && !forceRefresh) {
-        // Local cache keeps the booking UI useful before the remote refresh finishes.
-        const parsedData = sanitizePublicAppointments(JSON.parse(localData));
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsedData));
-        setAppointments(parsedData);
-        hasLocalData = true;
+      const result = await appointmentService.list();
+      if (!result.success || !result.data) return "empty";
+
+      const publicAppointments = sanitizePublicAppointments(result.data);
+      // Ignore stale responses when a newer agenda request has already started.
+      if (requestSequence !== agendaRequestSequenceRef.current) return "remote";
+
+      setAppointments(publicAppointments);
+      if (notifyOnSuccess) {
+        setShowRefreshNotification(true);
+        window.setTimeout(() => setShowRefreshNotification(false), 5000);
       }
-
-      if (forceRefresh) {
-        const requestSequence = ++agendaRequestSequenceRef.current;
-        const result = await appointmentService.list();
-        if (result.success && result.data) {
-          const publicAppointments = sanitizePublicAppointments(result.data);
-          // Ignore stale responses when a newer agenda request has already started.
-          if (requestSequence !== agendaRequestSequenceRef.current)
-            return "remote";
-
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(publicAppointments));
-          localStorage.setItem(STORAGE_TIMESTAMP_KEY, Date.now().toString());
-          setAppointments(publicAppointments);
-          if (notifyOnSuccess) {
-            setShowRefreshNotification(true);
-            window.setTimeout(() => setShowRefreshNotification(false), 5000);
-          }
-          return "remote";
-        }
-        return hasLocalData ? "local" : "empty";
-      }
-
-      return hasLocalData ? "local" : "empty";
+      return "remote";
     } catch (error) {
-      console.error(
-        "Error fetching appointments from API, using localStorage:",
-        error,
-      );
-      const localData = localStorage.getItem(STORAGE_KEY);
-      if (localData) {
-        setAppointments(sanitizePublicAppointments(JSON.parse(localData)));
-        return "local";
-      }
+      console.error("Error fetching appointments from API:", error);
       return "empty";
     }
   };
@@ -82,10 +53,7 @@ export function usePublicAppointments() {
 
     setRefreshingAgenda(true);
     try {
-      await Promise.all([
-        fetchAppointments(true, false),
-        new Promise((resolve) => window.setTimeout(resolve, 900)),
-      ]);
+      await fetchAppointments(false);
     } finally {
       setRefreshingAgenda(false);
     }
@@ -97,8 +65,7 @@ export function usePublicAppointments() {
       const time = now.toLocaleTimeString("pt-BR", { hour12: false });
       setCurrentTime(time);
       setCurrentDate(now.toLocaleDateString("pt-BR"));
-      // Refresh once at closing time so stale same-day bookings disappear.
-      if (time === "20:00:00") void fetchAppointments(true);
+      if (time === "20:00:00") void fetchAppointments();
     };
 
     updateTime();
@@ -107,56 +74,17 @@ export function usePublicAppointments() {
   }, []);
 
   useEffect(() => {
-    const clearOldData = () => {
-      const timestamp = localStorage.getItem(STORAGE_TIMESTAMP_KEY);
-      if (timestamp && Date.now() - Number(timestamp) >= 24 * 60 * 60 * 1000) {
-        localStorage.removeItem(STORAGE_KEY);
-        localStorage.removeItem(STORAGE_TIMESTAMP_KEY);
-      }
-    };
-
-    clearOldData();
-    void fetchAppointments(true, false);
-    // Expire the local snapshot daily even if the tab stays open.
-    const interval = window.setInterval(clearOldData, 60 * 60 * 1000);
-    return () => window.clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
     const synchronizeAgenda = () => {
-      if (document.visibilityState === "visible")
-        void fetchAppointments(true, false);
+      if (document.visibilityState === "visible") void fetchAppointments(false);
     };
 
-    // Visible tabs poll often enough to reduce double-booking without feeling heavy.
-    const interval = window.setInterval(synchronizeAgenda, 15000);
+    void fetchAppointments(false);
     window.addEventListener("focus", synchronizeAgenda);
     document.addEventListener("visibilitychange", synchronizeAgenda);
     return () => {
-      window.clearInterval(interval);
       window.removeEventListener("focus", synchronizeAgenda);
       document.removeEventListener("visibilitychange", synchronizeAgenda);
     };
-  }, []);
-
-  useEffect(() => {
-    const removePastAppointments = () => {
-      const saved = JSON.parse(
-        localStorage.getItem(STORAGE_KEY) ?? "[]",
-      ) as Appointment[];
-      const current = saved.filter(
-        (appointment) => appointment.date >= getCurrentDate(),
-      );
-      if (saved.length !== current.length) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
-        setAppointments(current);
-      }
-    };
-
-    removePastAppointments();
-    // Keep old appointments from blocking future date calculations in long-lived sessions.
-    const interval = window.setInterval(removePastAppointments, 60000);
-    return () => window.clearInterval(interval);
   }, []);
 
   return {
