@@ -1,11 +1,12 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState, useMemo } from "react";
 import { authService } from "../services/authService";
 import { appointmentService } from "../services/appointmentService";
-import { defaultServices, listServices } from "../services/serviceCatalog";
+import { listServices } from "../services/serviceCatalog";
 import { ApiError } from "../services/api";
-import { Appointment, DashboardStats, Service } from "../types/appointment";
+import { Appointment, Service } from "../types/appointment";
+import { createAvailableTimes } from "../utils/appointment";
 import { calculateDashboardStats } from "../utils/dashboard";
-import { toDateValue } from "../utils/date";
+import { addLocalDays, toDateValue } from "../utils/date";
 
 export type AdminMessage = {
   type: "success" | "error";
@@ -24,22 +25,7 @@ export type EditErrors = Partial<
   >
 >;
 
-const initialDashboardStats: DashboardStats = {
-  todayProfit: 0,
-  monthlyProfit: 0,
-  totalAppointments: 0,
-  dailyAverage: 0,
-  todayAppointments: 0,
-  monthlyAppointments: 0,
-  todayAttendances: 0,
-  monthlyAttendances: 0,
-  monthlyPending: 0,
-  monthlyAbsent: 0,
-  dailyProfits: {},
-  mostPopularServices: [],
-};
 
-// User-facing admin messages remain localized.
 const MESSAGES = {
   SESSION_EXPIRED: "Sua sessão expirou. Entre novamente.",
   UNABLE_TO_UPDATE: "Não foi possível atualizar os dados do painel.",
@@ -59,6 +45,8 @@ const MESSAGES = {
   CANCEL_ERROR: "Não foi possível excluir o agendamento.",
 } as const;
 
+const ALLOWED_TIMES = createAvailableTimes();
+
 export function useAdminPanel() {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -73,29 +61,15 @@ export function useAdminPanel() {
   const [message, setMessage] = useState<AdminMessage>(null);
   const [deleteTarget, setDeleteTarget] = useState<Appointment | null>(null);
   const [editErrors, setEditErrors] = useState<EditErrors>({});
-  const [services, setServices] = useState<Service[]>(defaultServices);
+  const [services, setServices] = useState<Service[]>([]);
   const [activeTab, setActiveTab] = useState<"appointments" | "dashboard">(
     "dashboard",
-  );
-  const [dashboardStats, setDashboardStats] = useState<DashboardStats>(
-    initialDashboardStats,
   );
   const loadingAppointmentsRef = useRef(false);
 
   const today = new Date();
   const todayDate = toDateValue(today);
-  const editLimit = new Date(
-    today.getFullYear(),
-    today.getMonth(),
-    today.getDate() + 30,
-  );
-  const editLimitDate = toDateValue(editLimit);
-  const allowedTimes = Array.from({ length: 23 }, (_, index) => {
-    const totalMinutes = 8 * 60 + index * 30;
-    const hour = Math.floor(totalMinutes / 60);
-    const minute = totalMinutes % 60;
-    return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-  }).filter((time) => !time.startsWith("12:"));
+  const editLimitDate = toDateValue(addLocalDays(today, 30));
 
   useEffect(() => {
     document.title = "Painel Admin | Barbearia Prime";
@@ -116,11 +90,9 @@ export function useAdminPanel() {
   }, []);
 
   useEffect(() => {
-    listServices()
-      .then((result) => {
-        if (result.success && result.data.length) setServices(result.data);
-      })
-      .catch(() => setServices(defaultServices));
+    listServices().then((result) => {
+      if (result.success && result.data.length) setServices(result.data);
+    });
   }, []);
 
   const loadAppointments = async (silent = false) => {
@@ -134,7 +106,7 @@ export function useAdminPanel() {
       const { data, success } = await appointmentService.listAdmin();
       if (success) {
         setAppointments(data);
-        setDashboardStats(calculateDashboardStats(data));
+        // dashboardStats recalculated via useMemo
         setMessage((current) =>
           current?.text === MESSAGES.UNABLE_TO_UPDATE ? null : current,
         );
@@ -249,7 +221,7 @@ export function useAdminPanel() {
     ) {
       nextErrors.date = MESSAGES.DATE_RANGE_VALIDATION;
     }
-    if (!allowedTimes.includes(editForm.time))
+    if (!ALLOWED_TIMES.includes(editForm.time))
       nextErrors.time = MESSAGES.TIME_VALIDATION;
 
     setEditErrors(nextErrors);
@@ -274,7 +246,7 @@ export function useAdminPanel() {
         appointment._id === editingId ? { ...result.data } : appointment,
       );
       setAppointments(updated);
-      setDashboardStats(calculateDashboardStats(updated));
+      // dashboardStats recalculated via useMemo
       setEditingId(null);
       setEditForm(null);
       setEditErrors({});
@@ -300,7 +272,7 @@ export function useAdminPanel() {
         appointment._id === id ? result.data : appointment,
       );
       setAppointments(updated);
-      setDashboardStats(calculateDashboardStats(updated));
+      // dashboardStats recalculated via useMemo
       setDeleteTarget(null);
       setMessage({ type: "success", text: MESSAGES.CANCEL_SUCCESS });
     } catch (error) {
@@ -342,6 +314,11 @@ export function useAdminPanel() {
     setEditForm(null);
     setEditErrors({});
   };
+
+  const dashboardStats = useMemo(
+    () => calculateDashboardStats(appointments),
+    [appointments],
+  );
 
   const filteredAppointments = filterDate
     ? appointments.filter((appointment) => appointment.date === filterDate)
@@ -397,7 +374,7 @@ export function useAdminPanel() {
     handleLogin,
     handleLogout,
     handleSave,
-    allowedTimes,
+    allowedTimes: ALLOWED_TIMES,
     isAuthenticated,
     loading,
     message,

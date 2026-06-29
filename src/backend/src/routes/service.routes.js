@@ -6,8 +6,8 @@ import {
   updateService
 } from "../controllers/service.controller.js";
 import { requireAuth } from "../middlewares/authMiddleware.js";
-import { asyncHandler } from "../utils/asyncHandler.js";
 import { validateRequest } from "../middlewares/validateRequest.js";
+import { wrap } from "../utils/asyncHandler.js";
 import {
   objectIdParamsSchema,
   serviceBodySchema,
@@ -16,18 +16,18 @@ import {
 
 export const serviceRoutes = Router();
 
-serviceRoutes.get("/", asyncHandler(listServices));
-serviceRoutes.post("/", requireAuth, validateRequest(serviceBodySchema), asyncHandler(createService));
+serviceRoutes.get("/", wrap(listServices));
+serviceRoutes.post("/", requireAuth, validateRequest(serviceBodySchema), wrap(createService));
 serviceRoutes.put(
   "/:id",
   requireAuth,
   validateRequest(objectIdParamsSchema, "params"),
   validateRequest(serviceUpdateSchema),
-  asyncHandler(updateService)
+  wrap(updateService)
 );
 serviceRoutes.delete(
   "/:id",
   requireAuth,
   validateRequest(objectIdParamsSchema, "params"),
-  asyncHandler(deleteService)
+  wrap(deleteService)
 );

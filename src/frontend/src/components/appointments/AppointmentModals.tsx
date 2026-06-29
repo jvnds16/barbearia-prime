@@ -1,5 +1,4 @@
-import { AlertCircle, CheckCircle2, RefreshCw, X } from "lucide-react";
-import { IconBrandWhatsapp } from "@tabler/icons-react";
+import { AlertCircle, CheckCircle2, MessageCircle, RefreshCw, X } from "lucide-react";
 import { Appointment, Service } from "../../types/appointment";
 import { formatDisplayDate } from "../../utils/date";
 
@@ -149,7 +148,7 @@ export function AppointmentModals({
                 rel="noreferrer"
                 className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 px-5 py-3 font-bold text-white transition hover:bg-green-500"
               >
-                <IconBrandWhatsapp size={20} />
+                <MessageCircle size={20} />
                 {status.actionLabel || "Continuar"}
               </a>
             )}

@@ -1,17 +1,15 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import HomePage from './pages/HomePage.tsx'
 import AdminPage from './pages/AdminPage.tsx'
 import './styles/index.css'
 
+const Page = (window.location.pathname.replace(/\/$/, '') || '/') === '/admin'
+  ? AdminPage
+  : HomePage
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <Router>
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/admin" element={<AdminPage />} />
-      </Routes>
-    </Router>
+    <Page />
   </React.StrictMode>,
 )

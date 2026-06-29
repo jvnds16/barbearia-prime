@@ -1,34 +1,40 @@
 import { env } from "../config/env.js";
-import { sendError } from "../utils/apiResponse.js";
+
+const ERROR_OVERRIDES = {
+  11000: { status: 409, message: "A record with this data already exists." },
+  CastError: { status: 400, message: "Invalid resource ID." },
+  ValidationError: { status: 400, message: "Invalid data.", withDetails: true },
+  "Origin not allowed by CORS.": { status: 403, message: "Origin is not allowed." }
+};
+
+function sendError(res, statusCode, error, details) {
+  return res.status(statusCode).json({
+    success: false,
+    error,
+    ...(details ? { details } : {})
+  });
+}
 
 export function errorHandler(error, req, res, next) {
-  // Slot-key duplicates are user-facing booking conflicts, not generic database errors.
-  if (error?.code === 11000 && (error?.keyPattern?.slotKey || error?.keyPattern?.slotKeys)) {
+  if (error?.code === 11000 && error?.keyPattern?.slotKeys) {
     return sendError(res, 409, "This time slot was just booked. Choose another one.");
   }
 
-  if (error?.code === 11000) {
-    return sendError(res, 409, "A record with this data already exists.");
-  }
-
-  if (error?.name === "CastError") {
-    return sendError(res, 400, "Invalid resource ID.");
-  }
-
-  if (error?.name === "ValidationError") {
-    const details = Object.entries(error.errors || {}).map(([field, value]) => ({
-      field,
-      message: value.message
-    }));
-    return sendError(res, 400, "Invalid data.", details);
+  for (const key of [String(error?.code), error?.name, error?.message]) {
+    if (key && key in ERROR_OVERRIDES) {
+      const { status, message, withDetails } = ERROR_OVERRIDES[key];
+      const details = withDetails
+        ? Object.entries(error.errors || {}).map(([field, value]) => ({
+            field,
+            message: value.message
+          }))
+        : undefined;
+      return sendError(res, status, message, details);
+    }
   }
 
   if (error instanceof SyntaxError && error.status === 400 && "body" in error) {
     return sendError(res, 400, "Invalid JSON body.");
-  }
-
-  if (error?.message === "Origin not allowed by CORS.") {
-    return sendError(res, 403, "Origin is not allowed.");
   }
 
   const statusCode = error.statusCode || (res.statusCode >= 400 ? res.statusCode : 500);

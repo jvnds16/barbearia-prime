@@ -1,20 +1,19 @@
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
-import { HttpError } from "../utils/httpError.js";
 
 export function login(req, res) {
   const { password } = req.body;
 
   if (!env.adminPassword || !env.jwtSecret) {
-    throw new HttpError(503, "Administrative access is temporarily unavailable.");
+    return res.status(503).json({ success: false, error: "Administrative access is temporarily unavailable." });
   }
 
   if (!password) {
-    throw new HttpError(400, "Password is required.");
+    return res.status(400).json({ success: false, error: "Password is required." });
   }
 
   if (password !== env.adminPassword) {
-    throw new HttpError(401, "Incorrect password.");
+    return res.status(401).json({ success: false, error: "Incorrect password." });
   }
 
   const token = jwt.sign({ role: "admin", name: "Administrator" }, env.jwtSecret, {

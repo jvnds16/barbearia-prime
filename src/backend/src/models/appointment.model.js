@@ -9,22 +9,10 @@ const appointmentSchema = new mongoose.Schema(
     durationMinutes: { type: Number, required: true, min: 1, default: 30 },
     date: { type: String, required: true, match: /^\d{4}-\d{2}-\d{2}$/ },
     time: { type: String, required: true, match: /^\d{2}:\d{2}$/ },
-    barber: { type: mongoose.Schema.Types.ObjectId, ref: "Barber" },
     status: {
       type: String,
-      enum: ["pending", "present", "absent", "cancelled", "completed"],
+      enum: ["pending", "present", "absent", "cancelled"],
       default: "pending"
-    },
-    slotKey: {
-      type: String,
-      unique: true,
-      sparse: true,
-      select: false
-    },
-    slotKeys: {
-      type: [String],
-      select: false,
-      default: undefined
     },
     idempotencyKey: {
       type: String,
@@ -38,8 +26,5 @@ const appointmentSchema = new mongoose.Schema(
   },
   { timestamps: true, collection: "appointments" }
 );
-
-appointmentSchema.index({ date: 1, time: 1, barber: 1 });
-appointmentSchema.index({ slotKeys: 1 }, { unique: true, sparse: true });
 
 export const Appointment = mongoose.model("Appointment", appointmentSchema);

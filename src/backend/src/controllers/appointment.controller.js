@@ -1,123 +1,102 @@
-import mongoose from "mongoose";
 import { Appointment } from "../models/appointment.model.js";
-import { HttpError } from "../utils/httpError.js";
 import { resolveServiceDetails } from "../services/serviceCatalog.service.js";
 import { getAvailableSlots } from "../services/availability.service.js";
-import { appointmentToApi } from "../utils/apiSerializers.js";
-import { sendData, sendMessage } from "../utils/apiResponse.js";
 import {
   BLOCKING_APPOINTMENT_STATUSES,
   VALID_APPOINTMENT_STATUSES,
-  createSlotKeys,
   ensureNoAppointmentConflict,
   hasRequiredLeadTime,
   isValidAppointmentDate,
   isValidAppointmentTime,
-  isValidCustomerName,
-  isValidPhone,
-  normalizeText,
-  syncAppointmentClient
+  normalizeText
 } from "../services/appointment.service.js";
 
+const APPOINTMENT_UPDATE_FIELDS = [
+  "customerName",
+  "customerPhone",
+  "serviceName",
+  "date",
+  "time",
+  "status"
+];
+const UUID_REGEX = /^[A-Za-z0-9_-]{8,100}$/;
+
+function existingAppointment(idempotencyKey) {
+  return idempotencyKey
+    ? Appointment.findOne({ idempotencyKey }).lean()
+    : Promise.resolve(null);
+}
+
+function pickAppointmentUpdate(req) {
+  const updateData = {};
+  for (const field of APPOINTMENT_UPDATE_FIELDS) {
+    if (req.body[field] !== undefined) updateData[field] = req.body[field];
+  }
+  return updateData;
+}
+
 export async function listAppointments(req, res) {
-  const query = {};
-
-  if (req.query.date) query.date = req.query.date;
-  if (req.query.status) query.status = req.query.status;
-  if (req.query.barber) query.barber = req.query.barber;
-
-  const appointments = await Appointment.find(query)
+  const appointments = await Appointment.find(req.query)
     .sort({ date: 1, time: 1 })
     .lean();
 
-  return sendData(res, appointments.map(appointmentToApi));
+  return res.json({ success: true, data: appointments });
 }
 
 export async function listPublicAppointments(req, res) {
-  const query = {};
-
-  if (req.query.date) query.date = req.query.date;
-
-  const appointments = await Appointment.find(query)
+  const appointments = await Appointment.find(req.query)
     .select("date time status durationMinutes")
     .sort({ date: 1, time: 1 })
     .lean();
 
   // Public availability must always reflect the latest bookings.
   res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
-  return sendData(res, appointments.map(appointmentToApi));
+  return res.json({ success: true, data: appointments });
 }
 
 export async function createAppointment(req, res) {
-  const customerName = normalizeText(req.body.customerName);
-  const customerPhone = normalizeText(req.body.customerPhone);
-  const serviceName = normalizeText(req.body.serviceName);
-  const date = normalizeText(req.body.date);
-  const time = normalizeText(req.body.time);
-  const barber = req.body.barber;
-  const idempotencyKey = normalizeText(req.get("Idempotency-Key") || req.body.idempotencyKey);
+  const { customerName, customerPhone, serviceName, date, time } = req.body;
+  const idempotencyKey = req.get("Idempotency-Key") || req.body.idempotencyKey || undefined;
 
-  if (idempotencyKey && !/^[A-Za-z0-9_-]{8,100}$/.test(idempotencyKey)) {
-    throw new HttpError(400, "Invalid idempotency key.");
+  if (idempotencyKey && !UUID_REGEX.test(idempotencyKey)) {
+    return res.status(400).json({ success: false, error: "Invalid idempotency key." });
   }
 
   if (idempotencyKey) {
     // Returning the previous result keeps client retries from creating duplicates.
-    const existing = await Appointment.findOne({ idempotencyKey }).lean();
+    const existing = await existingAppointment(idempotencyKey);
     if (existing) {
-      return sendMessage(
-        res,
-        "Appointment already registered.",
-        appointmentToApi(existing)
-      );
+      return res.json({ success: true, message: "Appointment already registered.", data: existing });
     }
   }
 
-  if (!customerName || !customerPhone || !serviceName || !date || !time) {
-    throw new HttpError(400, "Fill in all required fields.");
-  }
-
-  if (!isValidCustomerName(customerName)) {
-    throw new HttpError(400, "Enter first and last name, up to 80 characters.");
-  }
-
-  if (!isValidPhone(customerPhone)) {
-    throw new HttpError(400, "Invalid phone. Include the area code.");
-  }
-
-  if (barber && !mongoose.isValidObjectId(barber)) {
-    throw new HttpError(400, "Invalid barber.");
-  }
-
   if (!isValidAppointmentDate(date)) {
-    throw new HttpError(400, "Choose a valid date between today and the next 30 days.");
+    return res.status(400).json({ success: false, error: "Choose a valid date between today and the next 30 days." });
   }
 
   if (!isValidAppointmentTime(time)) {
-    throw new HttpError(400, "Time is outside business hours.");
+    return res.status(400).json({ success: false, error: "Time is outside business hours." });
   }
 
   if (!hasRequiredLeadTime(time, date)) {
-    throw new HttpError(400, "Choose a time at least 30 minutes in advance.");
+    return res.status(400).json({ success: false, error: "Choose a time at least 30 minutes in advance." });
   }
 
   const service = await resolveServiceDetails(serviceName);
   if (!service) {
-    throw new HttpError(400, "Invalid or unavailable service.");
+    return res.status(400).json({ success: false, error: "Invalid or unavailable service." });
   }
 
   // Service duration expands one booking across every occupied 30-minute slot.
   await ensureNoAppointmentConflict({
     date,
     time,
-    barber,
     durationMinutes: service.durationMinutes
   });
 
-  let appointment;
   try {
-    // Unique slot keys are the final database-level guard against race conditions.
-    appointment = await Appointment.create({
+    // Unique idempotency key is the final database-level guard against race conditions.
+    const created = await Appointment.create({
       customerName,
       customerPhone,
       serviceName,
@@ -125,117 +104,76 @@ export async function createAppointment(req, res) {
       durationMinutes: service.durationMinutes,
       date,
       time,
-      barber,
       status: "pending",
-      slotKeys: createSlotKeys({
-        date,
-        time,
-        barber,
-        durationMinutes: service.durationMinutes
-      }),
       idempotencyKey: idempotencyKey || undefined,
       timestamp: Date.now()
     });
+    return res.status(201).json({ success: true, message: "Appointment saved successfully.", data: created.toObject() });
   } catch (error) {
     if (error?.code === 11000 && idempotencyKey) {
-      const existing = await Appointment.findOne({ idempotencyKey }).lean();
+      const existing = await existingAppointment(idempotencyKey);
       if (existing) {
-        return sendMessage(
-          res,
-          "Appointment already registered.",
-          appointmentToApi(existing)
-        );
+        return res.json({ success: true, message: "Appointment already registered.", data: existing });
       }
     }
     throw error;
   }
-
-  await syncAppointmentClient({ name: customerName, phone: customerPhone });
-
-  return sendMessage(
-    res,
-    "Appointment saved successfully.",
-    appointmentToApi(appointment),
-    201
-  );
 }
 
 export async function updateAppointment(req, res) {
-  const id = req.params.id || req.body.id;
-
-  if (!id || !mongoose.isValidObjectId(id)) {
-    throw new HttpError(400, "Invalid appointment ID.");
-  }
-
-  const updateData = {};
-  if (req.body.customerName !== undefined) updateData.customerName = req.body.customerName;
-  if (req.body.customerPhone !== undefined) updateData.customerPhone = req.body.customerPhone;
-  if (req.body.serviceName !== undefined) updateData.serviceName = req.body.serviceName;
-  if (req.body.date !== undefined) updateData.date = req.body.date;
-  if (req.body.time !== undefined) updateData.time = req.body.time;
-  if (req.body.barber !== undefined) updateData.barber = req.body.barber;
-  if (req.body.status !== undefined) updateData.status = req.body.status;
+  const { id } = req.params;
+  const updateData = pickAppointmentUpdate(req);
 
   if (updateData.status !== undefined && !VALID_APPOINTMENT_STATUSES.has(updateData.status)) {
-    throw new HttpError(400, "Invalid appointment status.");
+    return res.status(400).json({ success: false, error: "Invalid appointment status." });
   }
 
-  const current = await Appointment.findById(id);
+  const current = await Appointment.findById(id).lean();
   if (!current) {
-    throw new HttpError(404, "Appointment not found.");
+    return res.status(404).json({ success: false, error: "Appointment not found." });
   }
 
   if (updateData.customerPhone) {
     updateData.customerPhone = normalizeText(updateData.customerPhone);
-    if (!isValidPhone(updateData.customerPhone)) {
-      throw new HttpError(400, "Invalid phone. Include the area code.");
-    }
   }
 
   if (updateData.customerName) {
     updateData.customerName = normalizeText(updateData.customerName);
-    if (!isValidCustomerName(updateData.customerName)) {
-      throw new HttpError(400, "Enter first and last name, up to 80 characters.");
-    }
+  }
+
+  if (updateData.serviceName) {
+    updateData.serviceName = normalizeText(updateData.serviceName);
   }
 
   if (updateData.date && updateData.date !== current.date && !isValidAppointmentDate(updateData.date)) {
-    throw new HttpError(400, "Choose a valid date between today and the next 30 days.");
+    return res.status(400).json({ success: false, error: "Choose a valid date between today and the next 30 days." });
   }
 
   if (updateData.time && updateData.time !== current.time && !isValidAppointmentTime(updateData.time)) {
-    throw new HttpError(400, "Time is outside business hours.");
+    return res.status(400).json({ success: false, error: "Time is outside business hours." });
   }
 
   const date = updateData.date || current.date;
   const time = updateData.time || current.time;
-  const barber = updateData.barber || current.barber;
   const status = updateData.status || current.status;
   let durationMinutes = current.durationMinutes || 30;
 
   const appointmentTimeChanged =
     (updateData.date !== undefined && updateData.date !== current.date) ||
     (updateData.time !== undefined && updateData.time !== current.time);
-  const barberChanged =
-    updateData.barber !== undefined &&
-    String(updateData.barber || "") !== String(current.barber || "");
   const serviceChanged =
     updateData.serviceName !== undefined &&
     normalizeText(updateData.serviceName) !== current.serviceName;
 
   // Only changes that can occupy a slot need conflict validation.
   if (appointmentTimeChanged && !hasRequiredLeadTime(time, date)) {
-    throw new HttpError(400, "Choose a time at least 30 minutes in advance.");
-  }
-
-  if (updateData.serviceName !== undefined) {
-    updateData.serviceName = normalizeText(updateData.serviceName);
+    return res.status(400).json({ success: false, error: "Choose a time at least 30 minutes in advance." });
   }
 
   if (serviceChanged) {
     const service = await resolveServiceDetails(updateData.serviceName);
     if (!service) {
-      throw new HttpError(400, "Invalid or unavailable service.");
+      return res.status(400).json({ success: false, error: "Invalid or unavailable service." });
     }
     updateData.price = service.price;
     updateData.durationMinutes = service.durationMinutes;
@@ -245,56 +183,31 @@ export async function updateAppointment(req, res) {
   const reactivatingSlot = ["cancelled", "absent"].includes(current.status);
   if (
     BLOCKING_APPOINTMENT_STATUSES.includes(status) &&
-    (appointmentTimeChanged || barberChanged || serviceChanged || reactivatingSlot)
+    (appointmentTimeChanged || serviceChanged || reactivatingSlot)
   ) {
-    await ensureNoAppointmentConflict({ date, time, barber, durationMinutes, ignoreId: id });
+    await ensureNoAppointmentConflict({ date, time, durationMinutes, ignoreId: id });
   }
 
-  const slotKeys = createSlotKeys({ date, time, barber, durationMinutes, status });
-  let updateOperation;
-
-  // Cancelled and absent appointments free their slots for new customers.
-  if (status === "cancelled") {
-    updateOperation = {
-      $set: {
-        ...updateData,
-        status: "cancelled",
-        cancelledAt: new Date(),
-        cancelledBy: req.user?.name || "Administrator"
-      },
-      $unset: { slotKey: 1, slotKeys: 1 }
-    };
-  } else if (status === "absent") {
-    updateOperation = {
-      $set: { ...updateData, status: "absent" },
-      $unset: { slotKey: 1, slotKeys: 1, cancelledAt: 1, cancelledBy: 1 }
-    };
-  } else {
-    updateOperation = {
-        $set: { ...updateData, slotKeys },
-        $unset: { slotKey: 1, cancelledAt: 1, cancelledBy: 1 }
-      };
-  }
+  // Cancelled records who/when; other transitions clear that metadata.
+  const isCancelled = status === "cancelled";
+  const updateOperation = {
+    $set: isCancelled
+      ? { ...updateData, status: "cancelled", cancelledAt: new Date(), cancelledBy: req.user?.name || "Administrator" }
+      : { ...updateData, status },
+    ...(isCancelled ? {} : { $unset: { cancelledAt: 1, cancelledBy: 1 } })
+  };
 
   const appointment = await Appointment.findByIdAndUpdate(id, updateOperation, {
     new: true,
-    runValidators: true
+    runValidators: true,
+    lean: true
   });
 
-  return sendMessage(
-    res,
-    "Appointment updated successfully.",
-    appointmentToApi(appointment)
-  );
+  return res.json({ success: true, message: "Appointment updated successfully.", data: appointment });
 }
 
 export async function deleteAppointment(req, res) {
-  const id = req.params.id || req.query.id;
-
-  if (!id || !mongoose.isValidObjectId(id)) {
-    throw new HttpError(400, "Invalid appointment ID.");
-  }
-
+  const { id } = req.params;
   const appointment = await Appointment.findByIdAndUpdate(
     id,
     {
@@ -302,31 +215,25 @@ export async function deleteAppointment(req, res) {
         status: "cancelled",
         cancelledAt: new Date(),
         cancelledBy: req.user?.name || "Administrator"
-      },
-      $unset: { slotKey: 1, slotKeys: 1 }
+      }
     },
-    { new: true }
+    { new: true, lean: true }
   );
 
   if (!appointment) {
-    throw new HttpError(404, "Appointment not found.");
+    return res.status(404).json({ success: false, error: "Appointment not found." });
   }
 
-  return sendMessage(
-    res,
-    "Appointment cancelled successfully.",
-    appointmentToApi(appointment)
-  );
+  return res.json({ success: true, message: "Appointment cancelled successfully.", data: appointment });
 }
 
 export async function listAvailableSlots(req, res) {
-  const { date, barber } = req.query;
+  const { date } = req.query;
 
   if (!date) {
-    throw new HttpError(400, "Date is required to list available time slots.");
+    return res.status(400).json({ success: false, error: "Date is required to list available time slots." });
   }
 
-  const timeSlots = await getAvailableSlots({ date, barber });
-  return sendData(res, timeSlots);
+  const timeSlots = await getAvailableSlots({ date });
+  return res.json({ success: true, data: timeSlots });
 }
-

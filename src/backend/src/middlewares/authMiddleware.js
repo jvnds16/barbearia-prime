@@ -1,22 +1,21 @@
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
-import { HttpError } from "../utils/httpError.js";
 
 export function requireAuth(req, res, next) {
   if (!env.jwtSecret) {
-    return next(new HttpError(503, "Administrative access is temporarily unavailable."));
+    return res.status(503).json({ success: false, error: "Administrative access is temporarily unavailable." });
   }
 
   const header = req.headers.authorization;
 
   if (!header?.startsWith("Bearer ")) {
-    return next(new HttpError(401, "Authentication token was not provided."));
+    return res.status(401).json({ success: false, error: "Authentication token was not provided." });
   }
 
   try {
     req.user = jwt.verify(header.replace("Bearer ", ""), env.jwtSecret);
     return next();
   } catch {
-    return next(new HttpError(401, "Authentication token is invalid or expired."));
+    return res.status(401).json({ success: false, error: "Authentication token is invalid or expired." });
   }
 }

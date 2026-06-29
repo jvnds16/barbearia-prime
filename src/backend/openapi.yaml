@@ -198,7 +198,7 @@ components:
       properties:
         name: { type: string, maxLength: 100 }
         price: { type: number, minimum: 0 }
-        duration: { type: string, example: "30 min" }
+        duration: { type: integer, minimum: 1, example: 30 }
         active: { type: boolean }
     AppointmentInput:
       type: object

@@ -9,8 +9,8 @@ import {
 } from "../controllers/appointment.controller.js";
 import { requireAuth } from "../middlewares/authMiddleware.js";
 import { appointmentLimiter } from "../middlewares/rateLimiters.js";
-import { asyncHandler } from "../utils/asyncHandler.js";
 import { validateRequest } from "../middlewares/validateRequest.js";
+import { wrap } from "../utils/asyncHandler.js";
 import {
   appointmentCreateSchema,
   appointmentListQuerySchema,
@@ -26,34 +26,34 @@ appointmentRoutes.get(
   "/",
   requireAuth,
   validateRequest(appointmentListQuerySchema, "query"),
-  asyncHandler(listAppointments)
+  wrap(listAppointments)
 );
 appointmentRoutes.post(
   "/",
   appointmentLimiter,
   validateRequest(appointmentCreateSchema),
-  asyncHandler(createAppointment)
+  wrap(createAppointment)
 );
 appointmentRoutes.get(
   "/public",
   validateRequest(publicAppointmentQuerySchema, "query"),
-  asyncHandler(listPublicAppointments)
+  wrap(listPublicAppointments)
 );
 appointmentRoutes.get(
   "/available-slots",
   validateRequest(availabilityQuerySchema, "query"),
-  asyncHandler(listAvailableSlots)
+  wrap(listAvailableSlots)
 );
 appointmentRoutes.put(
   "/:id",
   requireAuth,
   validateRequest(objectIdParamsSchema, "params"),
   validateRequest(appointmentUpdateSchema),
-  asyncHandler(updateAppointment)
+  wrap(updateAppointment)
 );
 appointmentRoutes.delete(
   "/:id",
   requireAuth,
   validateRequest(objectIdParamsSchema, "params"),
-  asyncHandler(deleteAppointment)
+  wrap(deleteAppointment)
 );

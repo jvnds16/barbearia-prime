@@ -1,6 +1,4 @@
 import { Appointment } from "../models/appointment.model.js";
-import { Client } from "../models/client.model.js";
-import { HttpError } from "../utils/httpError.js";
 import { addDaysToISO, businessMinutesNow } from "../utils/dateTime.js";
 import { generateAvailableTimeSlots, todayISO } from "../utils/timeSlots.js";
 
@@ -11,11 +9,7 @@ export const VALID_APPOINTMENT_STATUSES = new Set([
   "cancelled"
 ]);
 
-export const BLOCKING_APPOINTMENT_STATUSES = [
-  "pending",
-  "present",
-  "completed"
-];
+export const BLOCKING_APPOINTMENT_STATUSES = ["pending", "present"];
 
 export function normalizeText(value) {
   return String(value || "").trim().replace(/\s+/g, " ");
@@ -60,78 +54,34 @@ export function hasRequiredLeadTime(time, date) {
   return hour * 60 + minute > businessMinutesNow() + 30;
 }
 
-export function createSlotKeys({
-  date,
-  time,
-  barber,
-  durationMinutes = 30,
-  status = "pending"
-}) {
-  if (!BLOCKING_APPOINTMENT_STATUSES.includes(status)) return undefined;
-
-  // Each 30-minute segment gets its own key so longer services block overlap.
-  const [hour, minute] = time.split(":").map(Number);
-  const start = hour * 60 + minute;
-  const slots = Math.ceil(durationMinutes / 30);
-
-  return Array.from({ length: slots }, (_, index) => {
-    const slotMinutes = start + index * 30;
-    const slotHour = String(Math.floor(slotMinutes / 60)).padStart(2, "0");
-    const slotMinute = String(slotMinutes % 60).padStart(2, "0");
-    return `${date}|${slotHour}:${slotMinute}|${barber || "primary"}`;
-  });
-}
-
 export async function ensureNoAppointmentConflict({
   date,
   time,
-  barber,
   durationMinutes = 30,
   ignoreId
 }) {
-  const requestedSlots = createSlotKeys({ date, time, barber, durationMinutes });
+  const [hour, minute] = time.split(":").map(Number);
+  const startMinutes = hour * 60 + minute;
+  const endMinutes = startMinutes + durationMinutes;
+  // Overlap test: candidate [startMinutes, endMinutes) intersects any existing booking.
+  // Mongo computes the intersect via $expr/$and/$lt/$gt, so we do not load documents into Node.
   const query = {
     date,
-    status: { $in: BLOCKING_APPOINTMENT_STATUSES }
+    status: { $in: BLOCKING_APPOINTMENT_STATUSES },
+    $expr: {
+      $and: [
+        { $lt: [{ $add: [{ $multiply: [{ $toInt: { $substrBytes: ["$time", 0, 2] } }, 60] }, { $toInt: { $substrBytes: ["$time", 3, 2] } }] }, endMinutes] },
+        { $gt: [{ $add: [{ $add: [{ $multiply: [{ $toInt: { $substrBytes: ["$time", 0, 2] } }, 60] }, { $toInt: { $substrBytes: ["$time", 3, 2] } }] }, { $ifNull: ["$durationMinutes", 30] }] }, startMinutes] }
+      ]
+    }
   };
 
-  if (barber) query.barber = barber;
   if (ignoreId) query._id = { $ne: ignoreId };
 
-  const appointments = await Appointment.find(query)
-    .select("time durationMinutes")
-    .lean();
-
-  // Check generated slot keys instead of exact start times to catch partial overlaps.
-  const requested = new Set(requestedSlots);
-  const exists = appointments.some((appointment) => {
-    const occupiedSlots = createSlotKeys({
-      date,
-      time: appointment.time,
-      barber,
-      durationMinutes: appointment.durationMinutes || 30
-    });
-    return occupiedSlots.some((slot) => requested.has(slot));
-  });
-
-  if (exists) {
-    throw new HttpError(409, "This time slot is already booked.");
-  }
-}
-
-export async function syncAppointmentClient({ name, phone }) {
-  try {
-    // The client record is a convenience mirror; appointment creation should survive sync issues.
-    await Client.findOneAndUpdate(
-      { phone },
-      { name, phone },
-      { upsert: true, new: true, runValidators: true }
-    );
-  } catch (error) {
-    if (error?.code === 11000) {
-      await Client.updateOne({ phone }, { name });
-    } else {
-      console.error("Could not synchronize the client record:", error);
-    }
+  const conflict = await Appointment.exists(query);
+  if (conflict) {
+    const error = new Error("This time slot is already booked.");
+    error.statusCode = 409;
+    throw error;
   }
 }

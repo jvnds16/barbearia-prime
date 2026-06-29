@@ -12,7 +12,7 @@ import {
   Plus,
   RotateCcw,
 } from "lucide-react";
-import { ModernDatePicker } from "../components/date-picker/ModernDatePicker";
+import { DatePicker } from "../components/date-picker/DatePicker";
 import { formatDisplayDate } from "../utils/date";
 import { useAdminPanel } from "../hooks/useAdminPanel";
 import { Appointment } from "../types/appointment";
@@ -400,7 +400,8 @@ function AdminPage() {
                 <label className="block text-sm font-medium text-white mb-2">
                   Filtrar por data
                 </label>
-                <ModernDatePicker
+                <DatePicker
+                  variant="admin"
                   value={filterDate}
                   min={minFilterDate}
                   max={maxFilterDate}
@@ -585,7 +586,8 @@ function AdminPage() {
                               <label className="block text-sm font-medium text-white mb-2">
                                 Data
                               </label>
-                              <ModernDatePicker
+                              <DatePicker
+                                variant="admin"
                                 value={editForm?.date || ""}
                                 min={todayDate}
                                 max={editLimitDate}

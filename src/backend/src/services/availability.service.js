@@ -1,43 +1,24 @@
 import { Appointment } from "../models/appointment.model.js";
-import { generateAvailableTimeSlots, todayISO } from "../utils/timeSlots.js";
-import { businessMinutesNow } from "../utils/dateTime.js";
+import { generateAvailableTimeSlots } from "../utils/timeSlots.js";
+import { hasRequiredLeadTime } from "./appointment.service.js";
 
-function hasFutureLeadTime(time, date) {
-  if (date !== todayISO()) return true;
+const SLOT_MINUTES = 30;
 
-  const [hour, minute] = time.split(":").map(Number);
-  const slotMinutes = hour * 60 + minute;
-
-  // Hide same-day slots that are too close to the current business time.
-  return slotMinutes > businessMinutesNow() + 30;
-}
-
-export async function getAvailableSlots({ date, barber }) {
-  const query = {
-    date,
-    status: { $in: ["pending", "present", "completed"] }
-  };
-
-  if (barber) {
-    query.barber = barber;
-  }
-
-  const appointments = await Appointment.find(query)
+export async function getAvailableSlots({ date }) {
+  const appointments = await Appointment.find({ date, status: { $in: ["pending", "present"] } })
     .select("time durationMinutes")
     .lean();
 
-  // Compare ranges instead of start times so long services reserve every affected slot.
   return generateAvailableTimeSlots().filter((time) => {
+    if (!hasRequiredLeadTime(time, date)) return false;
     const [hour, minute] = time.split(":").map(Number);
     const candidateStart = hour * 60 + minute;
-    const candidateEnd = candidateStart + 30;
-    const occupied = appointments.some((item) => {
+    const candidateEnd = candidateStart + SLOT_MINUTES;
+    return !appointments.some((item) => {
       const [itemHour, itemMinute] = item.time.split(":").map(Number);
-      const appointmentStart = itemHour * 60 + itemMinute;
-      const appointmentEnd = appointmentStart + (item.durationMinutes || 30);
-      return candidateStart < appointmentEnd && candidateEnd > appointmentStart;
+      const itemStart = itemHour * 60 + itemMinute;
+      const itemEnd = itemStart + (item.durationMinutes || SLOT_MINUTES);
+      return candidateStart < itemEnd && candidateEnd > itemStart;
     });
-
-    return !occupied && hasFutureLeadTime(time, date);
   });
 }

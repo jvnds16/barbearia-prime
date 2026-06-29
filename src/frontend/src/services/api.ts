@@ -14,17 +14,8 @@ export class ApiError extends Error {
   }
 }
 
-export function getAuthToken() {
-  return sessionStorage.getItem("barbeariaPrimeToken");
-}
-
-export function setAuthToken(token: string) {
-  sessionStorage.setItem("barbeariaPrimeToken", token);
-}
-
-export function clearAuthToken() {
-  sessionStorage.removeItem("barbeariaPrimeToken");
-}
+const TOKEN_KEY = "barbeariaPrimeToken";
+const getAuthToken = () => sessionStorage.getItem(TOKEN_KEY);
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}) {
   const headers = new Headers(options.headers);

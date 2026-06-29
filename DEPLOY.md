@@ -58,8 +58,7 @@ cd src
 npm run db:setup
 ```
 
-Esse comando executa migrações pendentes e sincroniza os índices exclusivos usados para impedir
-agendamentos duplicados.
+Esse comando sincroniza os índices exclusivos usados para impedir agendamentos duplicados.
 
 ## 5. Verificação
 

@@ -1,41 +1,29 @@
-import { apiRequest, clearAuthToken, setAuthToken } from "./api";
-
-interface LoginResponse {
-  success: boolean;
-  token: string;
-  user: {
-    name: string;
-    role: string;
-  };
-}
+import { apiRequest } from "./api";
 
 interface SessionResponse {
-  success: boolean;
-  user: {
-    name: string;
-    role: string;
-  };
+  user: { name: string; role: string };
 }
+
+const TOKEN_KEY = "barbeariaPrimeToken";
 
 export const authService = {
   async login(password: string) {
-    const response = await apiRequest<LoginResponse>("/auth/login", {
+    const response = await apiRequest<{ token: string }>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ password })
     });
 
     // Store only the short-lived admin token; public booking flows never need it.
-    setAuthToken(response.token);
+    sessionStorage.setItem(TOKEN_KEY, response.token);
     return response;
   },
 
   logout() {
-    clearAuthToken();
+    sessionStorage.removeItem(TOKEN_KEY);
   },
 
   async getSession() {
-    return apiRequest<SessionResponse>("/auth/me", {
-      auth: true
-    });
+    const response = await apiRequest<SessionResponse>("/auth/me", { auth: true });
+    return response;
   }
 };

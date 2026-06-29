@@ -1,5 +1,4 @@
-import { RefreshCw } from "lucide-react";
-import { IconAlarm, IconScissors } from "@tabler/icons-react";
+import { Clock, RefreshCw, Scissors } from "lucide-react";
 import { Appointment } from "../../types/appointment";
 
 function OccupiedTimes({
@@ -31,13 +30,13 @@ function OccupiedTimes({
                       Horário ocupado
                     </span>
                     <div className="text-white mt-1">
-                      <IconScissors className="inline-block mr-1" />
+                      <Scissors className="inline-block mr-1" />
                       Indisponível para agendamento
                     </div>
                   </div>
                   <div className="shrink-0 text-right">
                     <span className="inline-flex items-center gap-1 whitespace-nowrap rounded bg-zinc-800 px-2 py-1 font-mono">
-                      <IconAlarm className="shrink-0" />
+                      <Clock className="shrink-0" />
                       {appointment.time}
                     </span>
                   </div>
@@ -96,13 +95,13 @@ export function AvailabilityPanel({
                         Horário ocupado
                       </span>
                       <div className="text-white mt-1">
-                        <IconScissors className="inline-block mr-1" />
+                        <Scissors className="inline-block mr-1" />
                         Indisponível para agendamento
                       </div>
                     </div>
                     <div className="shrink-0 text-right">
                       <span className="inline-flex items-center gap-1 whitespace-nowrap rounded bg-zinc-800 px-2 py-1 font-mono">
-                        <IconAlarm className="shrink-0" />
+                        <Clock className="shrink-0" />
                         {appointment.time}
                       </span>
                     </div>

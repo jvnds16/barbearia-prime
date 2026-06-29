@@ -1,11 +1,4 @@
-import { Calendar, Clock, Instagram, Menu, Scissors, X } from "lucide-react";
-import {
-  IconBrandWhatsapp,
-  IconCurrencyReal,
-  IconMapPinFilled,
-  IconPhone,
-  IconUserFilled,
-} from "@tabler/icons-react";
+import { Calendar, Clock, Instagram, MapPin, Menu, MessageCircle, Phone, Scissors, User, X } from "lucide-react";
 import { Service } from "../../types/appointment";
 
 export function HomeHero({
@@ -53,7 +46,7 @@ export function HomeHero({
             href="/admin"
             className="flex items-center gap-2 text-amber-500 hover:text-amber-400 transition font-semibold"
           >
-            <IconUserFilled className="w-4 h-4" />
+            <User className="w-4 h-4" />
             Área do Barbeiro
           </a>
         </div>
@@ -127,12 +120,11 @@ export function ServicesSection({
               {service.name}
             </h3>
             <p className="text-white mb-2">
-              <IconCurrencyReal size={19.5} className="inline-block mr-1" />
-              {service.price.toFixed(2)}
+              R$ {service.price.toFixed(2)}
             </p>
             <p className="text-white flex justify-center items-center gap-2">
               <Clock className="w-4 h-4 text-white" />
-              {service.duration}
+              {service.duration} min
             </p>
           </div>
         ))}
@@ -146,9 +138,9 @@ export function ContactSection() {
     <section id="contact" className="py-20 bg-zinc-900 text-center">
       <h2 className="text-3xl font-bold mb-4">Entre em contato</h2>
       <p className="text-white mb-6">
-        <IconMapPinFilled className="inline-block mr-1" /> Av. s/n Serra
+        <MapPin className="inline-block mr-1" /> Av. s/n Serra
         <br />
-        <IconPhone className="inline-block mr-1" /> (27) 98191-1375
+        <Phone className="inline-block mr-1" /> (27) 98191-1375
       </p>
       <div className="flex justify-center space-x-8">
         <a
@@ -159,7 +151,7 @@ export function ContactSection() {
           <Instagram className="h-8 w-8 text-amber-500 hover:text-amber-600 transition" />
         </a>
         <a href="https://wa.me/5527981911375" target="_blank" rel="noreferrer">
-          <IconBrandWhatsapp className="h-8 w-8 text-green-500 hover:text-green-600 transition" />
+          <MessageCircle className="h-8 w-8 text-green-500 hover:text-green-600 transition" />
         </a>
       </div>
     </section>
@@ -246,14 +238,14 @@ export function MobileMenu({
               rel="noreferrer"
               className="p-3 hover:bg-zinc-800 rounded-lg transition"
             >
-              <IconBrandWhatsapp className="h-6 w-6 text-green-500 hover:text-green-600" />
+              <MessageCircle className="h-6 w-6 text-green-500 hover:text-green-600" />
             </a>
           </div>
           <p className="text-center text-white text-sm">
-            <IconMapPinFilled className="inline-block mr-1" /> Av. s/n, Serra
+            <MapPin className="inline-block mr-1" /> Av. s/n, Serra
           </p>
           <p className="text-center text-white text-sm mt-2">
-            <IconPhone className="inline-block mr-1" /> (27) 98191-1375
+            <Phone className="inline-block mr-1" /> (27) 98191-1375
           </p>
         </div>
       </div>

@@ -1,11 +1,8 @@
 import { Router } from "express";
 import { appointmentRoutes } from "./appointment.routes.js";
 import { authRoutes } from "./auth.routes.js";
-import { barberRoutes } from "./barber.routes.js";
-import { clientRoutes } from "./client.routes.js";
 import { serviceRoutes } from "./service.routes.js";
 import { isDatabaseConnected } from "../config/database.js";
-import { requireDatabase } from "../middlewares/databaseMiddleware.js";
 
 export const routes = Router();
 
@@ -20,7 +17,5 @@ routes.get("/health", (req, res) => {
 });
 
 routes.use("/auth", authRoutes);
-routes.use("/services", requireDatabase, serviceRoutes);
-routes.use("/barbers", requireDatabase, barberRoutes);
-routes.use("/clients", requireDatabase, clientRoutes);
-routes.use("/appointments", requireDatabase, appointmentRoutes);
+routes.use("/services", serviceRoutes);
+routes.use("/appointments", appointmentRoutes);

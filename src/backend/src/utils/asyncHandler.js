@@ -1,3 +1,2 @@
-export const asyncHandler = (controller) => (req, res, next) => {
+export const wrap = (controller) => (req, res, next) =>
   Promise.resolve(controller(req, res, next)).catch(next);
-};

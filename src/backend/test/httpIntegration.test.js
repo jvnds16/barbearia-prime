@@ -6,7 +6,6 @@ import request from "supertest";
 import { app } from "../src/app.js";
 import { env } from "../src/config/env.js";
 import { serviceRoutes } from "../src/routes/service.routes.js";
-import { clientRoutes } from "../src/routes/client.routes.js";
 import { appointmentRoutes } from "../src/routes/appointment.routes.js";
 import { errorHandler } from "../src/middlewares/errorHandler.js";
 
@@ -73,21 +72,6 @@ test("resource routes reject invalid IDs before reaching MongoDB", async () => {
 
   assert.equal(response.status, 400);
   assert.equal(response.body.error, "Invalid resource ID.");
-});
-
-test("client creation is administrative and rejects invalid payloads", async () => {
-  const testApp = authenticatedTestApp("/clients", clientRoutes);
-
-  const unauthenticated = await request(testApp)
-    .post("/clients")
-    .send({ name: "João Silva", phone: "(27) 99999-9999" });
-  assert.equal(unauthenticated.status, 401);
-
-  const invalid = await request(testApp)
-    .post("/clients")
-    .set("Authorization", `Bearer ${adminToken()}`)
-    .send({ name: "João Silva", phone: "123", role: "admin" });
-  assert.equal(invalid.status, 400);
 });
 
 test("appointment payload validation runs before persistence", async () => {

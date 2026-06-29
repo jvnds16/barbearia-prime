@@ -3,12 +3,6 @@ import { z } from "zod";
 const trimmedText = (minimum, maximum) =>
   z.string().trim().min(minimum).max(maximum);
 
-// Brazilian phone numbers are stored as digits with area code, regardless of input formatting.
-const phone = trimmedText(8, 20).refine(
-  (value) => /^[1-9]{2}(?:[2-8]|9[1-9])[0-9]{7,8}$/.test(value.replace(/\D/g, "")),
-  "Invalid phone. Include the area code."
-);
-
 export const objectIdParamsSchema = z.object({
   id: z.string().regex(/^[a-f\d]{24}$/i, "Invalid resource ID.")
 });
@@ -17,33 +11,10 @@ export const loginBodySchema = z.object({
   password: z.string().min(1, "Password is required.")
 });
 
-export const clientBodySchema = z.object({
-  name: trimmedText(2, 80),
-  phone,
-  email: z.string().trim().email().max(254).optional()
-}).strict();
-
-export const clientUpdateSchema = clientBodySchema.partial().refine(
-  (value) => Object.keys(value).length > 0,
-  "At least one field must be provided."
-);
-
-export const barberBodySchema = z.object({
-  name: trimmedText(2, 80),
-  phone: phone.optional(),
-  specialties: z.array(trimmedText(1, 80)).max(20).optional(),
-  active: z.boolean().optional()
-}).strict();
-
-export const barberUpdateSchema = barberBodySchema.partial().refine(
-  (value) => Object.keys(value).length > 0,
-  "At least one field must be provided."
-);
-
 export const serviceBodySchema = z.object({
   name: trimmedText(2, 100),
   price: z.number().min(0),
-  duration: trimmedText(1, 30),
+  duration: z.number().int().min(1),
   active: z.boolean().optional()
 }).strict();
 
@@ -52,46 +23,54 @@ export const serviceUpdateSchema = serviceBodySchema.partial().refine(
   "At least one field must be provided."
 );
 
-const appointmentFields = {
-  customerName: z.string().optional(),
-  customerPhone: z.string().optional(),
-  serviceName: z.string().optional(),
-  date: z.string().optional(),
-  time: z.string().optional(),
-  barber: z.string().regex(/^[a-f\d]{24}$/i, "Invalid barber.").nullable().optional(),
-  status: z.enum(["pending", "present", "absent", "cancelled"]).optional(),
-  idempotencyKey: z.string().optional()
-};
+const APPOINTMENT_STATUSES = ["pending", "present", "absent", "cancelled"];
 
-// Appointment creation is permissive because business validation also derives service data.
+const trimmedField = (minimum, maximum) =>
+  z.string().trim().min(minimum).max(maximum);
+
+// Soft business checks (lead time, slot conflict) still happen in the controller; this
+// schema enforces the wire shape and the cheap string/format rules.
 export const appointmentCreateSchema = z.object({
-  ...appointmentFields,
-  customerName: z.string(),
-  customerPhone: z.string(),
-  serviceName: z.string(),
-  date: z.string(),
-  time: z.string()
-}).passthrough();
+  customerName: trimmedField(3, 80),
+  customerPhone: trimmedField(1, 20),
+  serviceName: trimmedField(1, 100),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must use the YYYY-MM-DD format."),
+  time: z.string().regex(/^\d{2}:\d{2}$/, "Time must use the HH:MM format."),
+  status: z.enum(APPOINTMENT_STATUSES).optional(),
+  idempotencyKey: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{8,100}$/, "Invalid idempotency key.")
+    .optional(),
+  // Headers carry the idempotency key in real requests; the schema keeps that flag optional.
+});
 
-export const appointmentUpdateSchema = z.object(appointmentFields)
-  .passthrough()
+export const appointmentUpdateSchema = z
+  .object({
+    customerName: trimmedField(3, 80).optional(),
+    customerPhone: trimmedField(1, 20).optional(),
+    serviceName: trimmedField(1, 100).optional(),
+    date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must use the YYYY-MM-DD format.")
+      .optional(),
+    time: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/, "Time must use the HH:MM format.")
+      .optional(),
+    status: z.enum(APPOINTMENT_STATUSES).optional()
+  })
+  .strict()
   .refine((value) => Object.keys(value).length > 0, "At least one field must be provided.");
 
 export const appointmentListQuerySchema = z.object({
   date: z.string().optional(),
-  status: z.enum(["pending", "present", "absent", "cancelled", "completed"]).optional(),
-  barber: z.string().regex(/^[a-f\d]{24}$/i, "Invalid barber.").optional()
+  status: z.enum(APPOINTMENT_STATUSES).optional()
 });
 
 export const availabilityQuerySchema = z.object({
-  date: z.string().min(1, "Date is required to list available time slots."),
-  barber: z.string().regex(/^[a-f\d]{24}$/i, "Invalid barber.").optional()
+  date: z.string().min(1, "Date is required to list available time slots.")
 });
 
 export const publicAppointmentQuerySchema = z.object({
   date: z.string().optional()
-});
-
-export const legacyDeleteQuerySchema = z.object({
-  id: z.string().regex(/^[a-f\d]{24}$/i, "Invalid appointment ID.")
 });

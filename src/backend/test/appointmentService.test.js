@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  createSlotKeys,
   isValidAppointmentTime,
   isValidCustomerName,
   isValidPhone,
@@ -23,31 +22,4 @@ test("validates the configured appointment time grid", () => {
   assert.equal(isValidAppointmentTime("08:00"), true);
   assert.equal(isValidAppointmentTime("12:00"), false);
   assert.equal(isValidAppointmentTime("19:00"), true);
-});
-
-test("creates one conflict key for every occupied 30-minute slot", () => {
-  assert.deepEqual(
-    createSlotKeys({
-      date: "2026-06-22",
-      time: "09:00",
-      barber: "barber-id",
-      durationMinutes: 80
-    }),
-    [
-      "2026-06-22|09:00|barber-id",
-      "2026-06-22|09:30|barber-id",
-      "2026-06-22|10:00|barber-id"
-    ]
-  );
-});
-
-test("does not reserve slots for non-blocking statuses", () => {
-  assert.equal(
-    createSlotKeys({
-      date: "2026-06-22",
-      time: "09:00",
-      status: "cancelled"
-    }),
-    undefined
-  );
 });

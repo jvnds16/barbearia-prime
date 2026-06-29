@@ -8,25 +8,23 @@ import {
 } from "react";
 import {
   Calendar,
+  Clock,
   Scissors,
   X,
   RefreshCw,
   CheckCircle2,
   ChevronDown,
   ShieldCheck,
+  AlertCircle,
+  MessageSquare,
+  Phone,
+  User,
 } from "lucide-react";
-import {
-  IconAlarm,
-  IconAlertSquareRounded,
-  IconBrandMessenger,
-  IconPhone,
-  IconUserFilled,
-} from "@tabler/icons-react";
 import { appointmentService } from "../services/appointmentService";
-import { defaultServices, listServices } from "../services/serviceCatalog";
-import { Appointment } from "../types/appointment";
+import { listServices } from "../services/serviceCatalog";
+import { Appointment, Service } from "../types/appointment";
 import { ApiError } from "../services/api";
-import { PublicDatePicker } from "../components/date-picker/PublicDatePicker";
+import { DatePicker } from "../components/date-picker/DatePicker";
 import {
   createAvailableTimes,
   formatPhone,
@@ -123,7 +121,7 @@ function HomePage() {
     date: "",
     time: "",
   });
-  const [services, setServices] = useState(defaultServices);
+  const [services, setServices] = useState<Service[]>([]);
   const appointmentInFlightRef = useRef(false);
   const {
     agendaRequestSequenceRef,
@@ -145,21 +143,11 @@ function HomePage() {
   } = usePublicAppointments();
 
   useEffect(() => {
-    const loadServices = async () => {
-      try {
-        const result = await listServices();
-        if (result.success && result.data?.length) {
-          setServices(result.data);
-        }
-      } catch (error) {
-        console.error(
-          "Could not load services from the API. Using the local fallback.",
-          error,
-        );
+    listServices().then((result) => {
+      if (result.success && result.data?.length) {
+        setServices(result.data);
       }
-    };
-
-    loadServices();
+    });
   }, []);
 
   const getMinDate = (): string => getCurrentDate();
@@ -179,10 +167,7 @@ function HomePage() {
 
   const availableTimesBase = createAvailableTimes();
   const selectedService = services.find((s) => s.name === formData.serviceName);
-  const selectedServiceDuration =
-    selectedService?.durationMinutes ||
-    Number.parseInt(selectedService?.duration || "30", 10) ||
-    30;
+  const selectedServiceDuration = selectedService?.duration || 30;
 
   const filteredTimes = formData.date
     ? availableTimesBase.filter((time) => {
@@ -743,7 +728,7 @@ function HomePage() {
               <div className="w-full max-w-2xl rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-900 to-zinc-950 p-6 shadow-2xl shadow-black/50 sm:p-8 lg:flex-1">
                 <div className="mb-7 rounded-xl border border-amber-500/25 bg-amber-500/[0.08] p-4">
                   <p className="text-amber-200 text-sm font-semibold">
-                    <IconBrandMessenger className="inline-block mr-1" />
+                    <MessageSquare className="inline-block mr-1" />
                     Horário de Funcionamento: de segunda a sábado. Agendamentos
                     disponíveis das 08:00 às 19:00, com intervalo para almoço
                     das 12:00 às 13:00.
@@ -769,7 +754,7 @@ function HomePage() {
                     role="alert"
                   >
                     <p className="flex items-start gap-2 text-sm font-semibold text-red-300">
-                      <IconAlertSquareRounded
+                      <AlertCircle
                         className="mt-0.5 shrink-0"
                         size={18}
                       />
@@ -787,7 +772,7 @@ function HomePage() {
                       Nome completo
                     </label>
                     <div className="group relative">
-                      <IconUserFilled
+                      <User
                         className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 transition group-focus-within:text-amber-300"
                         size={19}
                       />
@@ -830,7 +815,7 @@ function HomePage() {
                       Telefone
                     </label>
                     <div className="group relative">
-                      <IconPhone
+                      <Phone
                         className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 transition group-focus-within:text-amber-300"
                         size={20}
                       />
@@ -935,7 +920,8 @@ function HomePage() {
                     >
                       Data do agendamento
                     </label>
-                    <PublicDatePicker
+                    <DatePicker
+                      variant="public"
                       value={formData.date}
                       min={getMinDate()}
                       max={getMaxDate()}
@@ -974,7 +960,7 @@ function HomePage() {
                       Horário disponível
                     </label>
                     <div className="group relative">
-                      <IconAlarm
+                      <Clock
                         className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 transition group-focus-within:text-amber-300"
                         size={20}
                       />
